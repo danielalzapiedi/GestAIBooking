@@ -1,0 +1,98 @@
+@page "/rates/{PropertyId:int}"
+@using GestAI.Web.Dtos
+@inject ApiClient Api
+@inject NavigationManager Nav
+
+<PageTitle>Tarifas</PageTitle>
+
+<div class="pagetitle d-flex justify-content-between align-items-center">
+    <div>
+        <h1>Tarifas</h1>
+        <p class="text-muted mb-0">Administrá planes tarifarios, temporadas y rangos específicos por unidad.</p>
+    </div>
+    <button class="btn btn-primary" @onclick='() => Nav.NavigateTo($"/rates/{PropertyId}/new")'>
+        <i class="bi bi-plus-circle me-1"></i> Nueva tarifa
+    </button>
+</div>
+
+<div class="card">
+    <div class="card-body pt-3">
+        <div class="row g-2 mb-3">
+            <div class="col-md-4"><input class="form-control" placeholder="Buscar tarifa" @bind="_search" /></div>
+            <div class="col-md-4">
+                <select class="form-select" @bind="_unitFilter">
+                    <option value="0">Todas las unidades</option>
+                    @foreach (var u in _units)
+                    {
+                        <option value="@u.Id">@u.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-4"><select class="form-select" @bind="_activeFilter"><option value="all">Todos los estados</option><option value="active">Activas</option><option value="inactive">Inactivas</option></select></div>
+        </div>
+
+        @if (!_loaded)
+        {
+            <EmptyState Title="Cargando información" Description="Estamos trayendo los datos de esta pantalla." Icon="bi-hourglass-split" />
+        }
+        else if (!Filtered.Any())
+        {
+            <EmptyState Title="No hay tarifas para mostrar" Description="Creá un plan tarifario o cambiá los filtros aplicados." Icon="bi-cash-stack" />
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Tarifa</th>
+                            <th>Unidad</th>
+                            <th>Base</th>
+                            <th>Fin de semana</th>
+                            <th>Estado</th>
+                            <th>Reglas</th>
+                            <th class="text-end">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var r in Filtered)
+                    {
+                        <tr>
+                            <td><strong>@r.Name</strong></td>
+                            <td>@r.UnitName</td>
+                            <td>@r.BaseNightlyRate.ToString("0.00")</td>
+                            <td>@(r.WeekendAdjustmentEnabled ? $"{r.WeekendAdjustmentType} {r.WeekendAdjustmentValue:0.##}" : "No")</td>
+                            <td><StatusBadge IsActive="@r.IsActive" Text="@(r.IsActive ? "Activa" : "Inactiva")" /></td>
+                            <td><span class="small text-muted">Temp: @r.SeasonalRates.Count · Rangos: @r.DateRangeRates.Count</span></td>
+                            <td class="text-end"><button class="btn btn-sm btn-outline-primary" @onclick='() => Nav.NavigateTo($"/rates/{PropertyId}/{r.Id}/edit")'>Editar</button></td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public int PropertyId { get; set; }
+    private bool _loaded;
+    private List<RatePlanDto> _rates = new();
+    private List<UnitListItemDto> _units = new();
+    private string _search = string.Empty;
+    private int _unitFilter;
+    private string _activeFilter = "all";
+
+    private IEnumerable<RatePlanDto> Filtered => _rates.Where(x =>
+        (_unitFilter == 0 || x.UnitId == _unitFilter)
+        && (_activeFilter == "all" || (_activeFilter == "active" && x.IsActive) || (_activeFilter == "inactive" && !x.IsActive))
+        && (string.IsNullOrWhiteSpace(_search) || x.Name.Contains(_search, StringComparison.OrdinalIgnoreCase) || x.UnitName.Contains(_search, StringComparison.OrdinalIgnoreCase)));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loaded = false;
+        _rates = (await Api.GetAsync<AppResult<List<RatePlanDto>>>($"api/properties/{PropertyId}/rates"))?.Data ?? new();
+        _units = (await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units"))?.Data ?? new();
+        _loaded = true;
+    }
+}

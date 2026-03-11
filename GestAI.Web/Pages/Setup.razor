@@ -1,0 +1,8 @@
+@page "/setup"
+@inject NavigationManager Nav
+
+<div class="container py-4">
+    <h3>Setup</h3>
+    <p class="text-muted">Este repo viene con seed automático (usuario + hospedaje demo). Si llegaste acá, revisá el README.</p>
+    <button class="btn btn-primary" @onclick="@(()=>Nav.NavigateTo("/"))">Ir al inicio</button>
+</div>

@@ -1,0 +1,29 @@
+﻿@* Encabezado estilo NiceAdmin *@
+<div class="pagetitle">
+    <h1>@Title</h1>
+    @if (Breadcrumbs?.Any() == true)
+    {
+        <nav>
+            <ol class="breadcrumb">
+                @foreach (var b in Breadcrumbs)
+                {
+                    if (!string.IsNullOrWhiteSpace(b.Href))
+                    {
+                        <li class="breadcrumb-item"><a href="@b.Href">@b.Text</a></li>
+                    }
+                    else
+                    {
+                        <li class="breadcrumb-item active">@b.Text</li>
+                    }
+                }
+            </ol>
+        </nav>
+    }
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public List<BreadcrumbItem>? Breadcrumbs { get; set; }
+
+    public sealed record BreadcrumbItem(string Text, string? Href = null);
+}

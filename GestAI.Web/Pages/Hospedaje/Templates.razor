@@ -1,0 +1,18 @@
+@page "/templates/{PropertyId:int}"
+@using GestAI.Web.Dtos
+@inject ApiClient Api
+<PageTitle>Templates</PageTitle>
+<h1 class="h3 mb-3">Plantillas</h1>
+@if (_templates is null) { <p>Cargando...</p> } else {
+<div class="row g-3">
+@foreach (var t in _templates)
+{
+    <div class="col-12 col-lg-6"><div class="card"><div class="card-body"><h5 class="card-title">@t.Type · @t.Name</h5><pre class="small mb-0" style="white-space:pre-wrap">@t.Body</pre></div></div></div>
+}
+</div>
+}
+@code {
+[Parameter] public int PropertyId { get; set; }
+private List<MessageTemplateDto>? _templates;
+protected override async Task OnParametersSetAsync() => _templates = (await Api.GetAsync<AppResult<List<MessageTemplateDto>>>($"api/properties/{PropertyId}/templates"))?.Data ?? new();
+}

@@ -1,0 +1,417 @@
+@page "/bookings/{PropertyId:int}/{BookingId:int}"
+@inject ApiClient Api
+@inject NavigationManager Nav
+@using GestAI.Web.Dtos
+
+<div class="pagetitle d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+        <h1>Detalle de reserva</h1>
+        <div class="text-muted small">Centro operativo de la reserva</div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <button class="btn btn-outline-secondary" @onclick="GoToEdit"><i class="bi bi-pencil"></i> Editar</button>
+        <button class="btn btn-outline-primary" @onclick="OpenDuplicateModal"><i class="bi bi-copy"></i> Duplicar</button>
+        <button class="btn btn-outline-dark" @onclick="Back"><i class="bi bi-arrow-left"></i> Volver</button>
+    </div>
+</div>
+
+@if (!_loaded)
+{
+    <EmptyState Title="Cargando reserva" Description="Estamos trayendo el detalle, pagos y trazabilidad de la reserva." Icon="bi-receipt" />
+}
+else if (_booking is null)
+{
+    <EmptyState Title="Reserva no encontrada" Description="No pudimos obtener el detalle solicitado o ya no existe." Icon="bi-exclamation-triangle" />
+}
+else
+{
+    <div class="row g-3">
+        <div class="col-12 col-xl-8">
+            <div class="row g-3">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                <div>
+                                    <h5 class="card-title mb-1">Datos de la reserva</h5>
+                                    <div class="small text-muted">Código @_booking.BookingCode</div>
+                                </div>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <span class="badge @StatusBadge(_booking.Status)">@_booking.Status</span>
+                                    <span class="badge @OperationalBadge(_booking.OperationalStatus)">@_booking.OperationalStatus</span>
+                                    <span class="badge @PaymentBadgeClass()">@PaymentBadgeText()</span>
+                                </div>
+                            </div>
+
+                            @if (!string.IsNullOrWhiteSpace(_message))
+                            {
+                                <div class="alert alert-success">@_message</div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(_error))
+                            {
+                                <div class="alert alert-danger">@_error</div>
+                            }
+
+                            <div class="row g-3">
+                                <div class="col-12 col-md-6">
+                                    <div><strong>Unidad:</strong> @_booking.UnitName</div>
+                                    <div><strong>Huésped:</strong> @_booking.GuestName</div>
+                                    <div><strong>Origen:</strong> @_booking.Source</div>
+                                    <div><strong>Tags:</strong> @(_booking.Tags ?? "-")</div>
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <div><strong>Check-in:</strong> @_booking.CheckInDate</div>
+                                    <div><strong>Check-out:</strong> @_booking.CheckOutDate</div>
+                                    <div><strong>Noches:</strong> @_booking.Nights</div>
+                                    <div><strong>Pasajeros:</strong> @_booking.Adults adultos, @_booking.Children niños</div>
+                                </div>
+                            </div>
+
+                            <hr />
+
+                            <div class="row g-2 align-items-end">
+                                <div class="col-12 col-md-4">
+                                    <label class="form-label">Cambiar estado</label>
+                                    <select class="form-select" @bind="_newStatus">
+                                        @foreach (var status in Enum.GetValues<BookingStatus>())
+                                        {
+                                            <option value="@status">@status</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-12 col-md-8 d-flex gap-2 flex-wrap">
+                                    <button class="btn btn-outline-primary" disabled="@_savingStatus" @onclick="ChangeStatus">Aplicar estado</button>
+                                    @if (_booking.Status != BookingStatus.CheckedIn)
+                                    {
+                                        <button class="btn btn-success" disabled="@_workingOperation" @onclick="OpenCheckInModal">Realizar check-in</button>
+                                    }
+                                    @if (_booking.Status == BookingStatus.CheckedIn || _booking.Status == BookingStatus.Confirmed)
+                                    {
+                                        <button class="btn btn-warning" disabled="@_workingOperation" @onclick="OpenCheckOutModal">Realizar check-out</button>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">Resumen económico</h5><div class="small text-muted mb-3">Visualización de total, cobros, saldo pendiente y promociones aplicadas.</div>
+                            <div class="detail-section-grid">
+                                <div class="detail-metric"><div class="detail-metric-label">Noches</div><div class="detail-metric-value">@_booking.Nights</div></div>
+                                <div class="detail-metric"><div class="detail-metric-label">Precio por noche</div><div class="detail-metric-value">@_booking.AverageNightlyRate.ToString("0.00")</div></div>
+                                <div class="detail-metric"><div class="detail-metric-label">Subtotal</div><div class="detail-metric-value">@_booking.BaseAmount.ToString("0.00")</div></div>
+                                <div class="detail-metric"><div class="detail-metric-label">Promociones</div><div class="detail-metric-value text-success">- @_booking.PromotionsAmount.ToString("0.00")</div></div>
+                                <div class="detail-metric"><div class="detail-metric-label">Total</div><div class="detail-metric-value">@_booking.TotalAmount.ToString("0.00")</div></div>
+                                <div class="detail-metric"><div class="detail-metric-label">Seña esperada</div><div class="detail-metric-value">@_booking.ExpectedDepositAmount.ToString("0.00")</div></div>
+                                <div class="detail-metric"><div class="detail-metric-label">Pagado</div><div class="detail-metric-value">@_booking.PaidAmount.ToString("0.00")</div></div>
+                                <div class="detail-metric"><div class="detail-metric-label">Saldo pendiente</div><div class="detail-metric-value text-danger">@_booking.PendingAmount.ToString("0.00")</div></div>
+                            </div>
+
+                            @if (_booking.PricingLines.Count > 0)
+                            {
+                                <hr />
+                                <div class="table-responsive">
+                                    <table class="table table-sm">
+                                        <thead><tr><th>Concepto</th><th class="text-end">Monto</th></tr></thead>
+                                        <tbody>
+                                        @foreach (var line in _booking.PricingLines)
+                                        {
+                                            <tr><td>@line.Label</td><td class="text-end">@line.Amount.ToString("0.00")</td></tr>
+                                        }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                <h5 class="card-title mb-0">Pagos</h5>
+                                <button class="btn btn-sm btn-primary" @onclick="OpenPaymentModal"><i class="bi bi-plus"></i> Registrar pago</button>
+                            </div>
+                            @if (_payments is null || _payments.Count == 0)
+                            {
+                                <EmptyState Title="Sin pagos registrados" Description="Registrá el primer pago para ver el historial y el saldo actualizado." Icon="bi-cash-coin" />
+                            }
+                            else
+                            {
+                                <div class="table-responsive mt-3">
+                                    <table class="table table-sm align-middle">
+                                        <thead><tr><th>Fecha</th><th>Método</th><th>Estado</th><th>Notas</th><th class="text-end">Monto</th><th></th></tr></thead>
+                                        <tbody>
+                                        @foreach (var p in _payments)
+                                        {
+                                            <tr>
+                                                <td>@p.Date</td><td>@p.Method</td><td>@p.Status</td><td>@p.Notes</td><td class="text-end">@p.Amount.ToString("0.00")</td>
+                                                <td class="text-end"><button class="btn btn-sm btn-outline-danger" @onclick="(()=>DeletePayment(p.Id))"><i class="bi bi-trash"></i></button></td>
+                                            </tr>
+                                        }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">Timeline e historial</h5>
+                            @if (_booking.Timeline.Count == 0)
+                            {
+                                <EmptyState Title="Sin eventos todavía" Description="La trazabilidad se irá completando a medida que se registren cambios en la reserva." Icon="bi-clock-history" />
+                            }
+                            else
+                            {
+                                <div class="timeline-small">
+                                    @foreach (var item in _booking.Timeline)
+                                    {
+                                        <div class="border-start ps-3 pb-3 position-relative">
+                                            <span class="position-absolute top-0 start-0 translate-middle p-2 bg-primary border border-light rounded-circle"></span>
+                                            <div class="small text-muted">@item.ChangedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm") · @(item.ChangedByName ?? "Sistema")</div>
+                                            <div class="fw-bold">@item.Title</div>
+                                            @if (!string.IsNullOrWhiteSpace(item.Detail))
+                                            {
+                                                <div>@item.Detail</div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-xl-4">
+            <div class="row g-3">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">Datos del huésped</h5>
+                            <div><strong>Nombre:</strong> @_booking.GuestName</div>
+                            <div><strong>Teléfono:</strong> @(_booking.GuestPhone ?? "-")</div>
+                            <div><strong>Email:</strong> @(_booking.GuestEmail ?? "-")</div>
+                            <div><strong>Documento:</strong> @(_booking.GuestDocumentNumber ?? "-")</div>
+                            <div><strong>Huéspedes finales:</strong> @(_booking.FinalGuestsCount > 0 ? _booking.FinalGuestsCount.ToString() : "-")</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">Notas y observaciones</h5>
+                            <div class="mb-2"><strong>Notas internas:</strong><br />@(_booking.InternalNotes ?? "-")</div>
+                            <div class="mb-2"><strong>Notas generales:</strong><br />@(_booking.Notes ?? "-")</div>
+                            <div><strong>Notas visibles al huésped:</strong><br />@(_booking.GuestVisibleNotes ?? "-")</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">Operación diaria</h5>
+                            <div><strong>Documentación verificada:</strong> @BoolText(_booking.DocumentationVerified)</div>
+                            <div><strong>Depósito verificado:</strong> @BoolText(_booking.DepositVerified)</div>
+                            <div><strong>Hora real check-in:</strong> @(_booking.ActualCheckInTime?.ToString("HH:mm") ?? "-")</div>
+                            <div><strong>Hora real check-out:</strong> @(_booking.ActualCheckOutTime?.ToString("HH:mm") ?? "-")</div>
+                            <div><strong>Observaciones ingreso:</strong><br />@(_booking.CheckInNotes ?? "-")</div>
+                            <div><strong>Observaciones salida:</strong><br />@(_booking.CheckOutNotes ?? "-")</div>
+                            <div><strong>Limpieza pendiente:</strong> @BoolText(_booking.HasCleaningTaskPending)</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_payModalOpen)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,.5);">
+        <div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Registrar pago</h5><button type="button" class="btn-close" @onclick="ClosePaymentModal"></button></div>
+        <div class="modal-body">
+            <div class="row g-2">
+                <div class="col-12"><label class="form-label">Monto</label><input class="form-control" type="number" step="0.01" @bind="_paymentAmount" /></div>
+                <div class="col-12 col-md-6"><label class="form-label">Método</label><select class="form-select" @bind="_paymentMethod">@foreach (var method in Enum.GetValues<PaymentMethod>()){<option value="@method">@method</option>}</select></div>
+                <div class="col-12 col-md-6"><label class="form-label">Estado</label><select class="form-select" @bind="_paymentStatus">@foreach (var status in Enum.GetValues<PaymentStatus>()){<option value="@status">@status</option>}</select></div>
+                <div class="col-12 col-md-6"><label class="form-label">Fecha</label><input class="form-control" type="date" value="@_paymentDateStr" @onchange="OnPaymentDateChanged" /></div>
+                <div class="col-12"><label class="form-label">Notas</label><textarea class="form-control" rows="2" @bind="_paymentNotes"></textarea></div>
+            </div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="ClosePaymentModal">Cancelar</button><button class="btn btn-primary" @onclick="SavePayment">Guardar</button></div></div></div>
+    </div>
+}
+
+@if (_operationModalOpen)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,.5);">
+        <div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">@(_operationIsCheckIn ? "Realizar check-in" : "Realizar check-out")</h5><button type="button" class="btn-close" @onclick="CloseOperationModal"></button></div>
+        <div class="modal-body">
+            <div class="row g-2">
+                <div class="col-12 col-md-6"><label class="form-label">Hora</label><input class="form-control" type="time" value="@_operationTimeStr" @onchange="OnOperationTimeChanged" /></div>
+                <div class="col-12 col-md-6"><label class="form-label">Huéspedes finales</label><input class="form-control" type="number" min="0" @bind="_finalGuestsCount" /></div>
+                <div class="col-12 col-md-6 form-check mt-4"><input class="form-check-input" type="checkbox" @bind="_documentationVerified" id="docv" /><label class="form-check-label" for="docv">Documentación verificada</label></div>
+                <div class="col-12 col-md-6 form-check mt-4"><input class="form-check-input" type="checkbox" @bind="_depositVerified" id="depv" /><label class="form-check-label" for="depv">Depósito verificado</label></div>
+                <div class="col-12"><label class="form-label">Observaciones</label><textarea class="form-control" rows="3" @bind="_operationNotes"></textarea></div>
+            </div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="CloseOperationModal">Cancelar</button><button class="btn btn-primary" @onclick="ConfirmOperation">Guardar</button></div></div></div>
+    </div>
+}
+
+@if (_duplicateModalOpen)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,.5);">
+        <div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Duplicar reserva</h5><button type="button" class="btn-close" @onclick="CloseDuplicateModal"></button></div>
+        <div class="modal-body"><div class="row g-2">
+            <div class="col-12 col-md-6"><label class="form-label">Check-in</label><input class="form-control" type="date" value="@_dupCheckInStr" @onchange="OnDupCheckInChanged" /></div>
+            <div class="col-12 col-md-6"><label class="form-label">Check-out</label><input class="form-control" type="date" value="@_dupCheckOutStr" @onchange="OnDupCheckOutChanged" /></div>
+            <div class="col-12"><div class="text-muted small">Se copiarán huésped, unidad, noches y notas. Luego se recalcularán las tarifas.</div></div>
+        </div></div>
+        <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="CloseDuplicateModal">Cancelar</button><button class="btn btn-primary" @onclick="ConfirmDuplicate">Duplicar</button></div></div></div>
+    </div>
+}
+
+@code {
+    [Parameter] public int PropertyId { get; set; }
+    [Parameter] public int BookingId { get; set; }
+
+    private bool _loaded;
+    private BookingDetailDto? _booking;
+    private List<PaymentDto>? _payments;
+    private string? _error;
+    private string? _message;
+    private BookingStatus _newStatus;
+    private bool _savingStatus;
+    private bool _workingOperation;
+
+    private bool _payModalOpen;
+    private decimal _paymentAmount;
+    private PaymentMethod _paymentMethod = PaymentMethod.Transfer;
+    private PaymentStatus _paymentStatus = PaymentStatus.Paid;
+    private DateOnly _paymentDate = DateOnly.FromDateTime(DateTime.Today);
+    private string? _paymentNotes;
+    private string _paymentDateStr => _paymentDate.ToString("yyyy-MM-dd");
+
+    private bool _operationModalOpen;
+    private bool _operationIsCheckIn;
+    private TimeOnly _operationTime = TimeOnly.FromDateTime(DateTime.Now);
+    private string _operationTimeStr => _operationTime.ToString("HH:mm");
+    private string? _operationNotes;
+    private int? _finalGuestsCount;
+    private bool _documentationVerified;
+    private bool _depositVerified;
+
+    private bool _duplicateModalOpen;
+    private DateOnly _dupCheckIn = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+    private DateOnly _dupCheckOut = DateOnly.FromDateTime(DateTime.Today.AddDays(2));
+    private string _dupCheckInStr => _dupCheckIn.ToString("yyyy-MM-dd");
+    private string _dupCheckOutStr => _dupCheckOut.ToString("yyyy-MM-dd");
+
+    protected override async Task OnParametersSetAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loaded = false;
+        _error = null;
+        _booking = (await Api.GetAsync<AppResult<BookingDetailDto>>($"api/properties/{PropertyId}/bookings/{BookingId}"))?.Data;
+        _payments = (await Api.GetAsync<AppResult<List<PaymentDto>>>($"api/properties/{PropertyId}/bookings/{BookingId}/payments"))?.Data ?? new();
+        if (_booking is not null)
+        {
+            _newStatus = _booking.Status;
+            _dupCheckIn = _booking.CheckOutDate;
+            _dupCheckOut = _booking.CheckOutDate.AddDays(Math.Max(1, _booking.Nights));
+            _documentationVerified = _booking.DocumentationVerified;
+            _depositVerified = _booking.DepositVerified;
+            _finalGuestsCount = _booking.FinalGuestsCount > 0 ? _booking.FinalGuestsCount : _booking.Adults + _booking.Children;
+        }
+        _loaded = true;
+    }
+
+    private async Task ChangeStatus()
+    {
+        _savingStatus = true;
+        _error = null;
+        var result = await Api.PostJsonAsync<AppResult, object>($"api/properties/{PropertyId}/bookings/{BookingId}/status", new { Status = _newStatus, Reason = (string?)null });
+        _savingStatus = false;
+        if (result?.Success != true) { _error = result?.Message ?? "No se pudo cambiar el estado."; return; }
+        _message = "Estado actualizado.";
+        await Load();
+    }
+
+    private void OpenPaymentModal()
+    {
+        _paymentAmount = _booking?.PendingAmount > 0 ? _booking.PendingAmount : 0m;
+        _paymentMethod = PaymentMethod.Transfer;
+        _paymentStatus = PaymentStatus.Paid;
+        _paymentDate = DateOnly.FromDateTime(DateTime.Today);
+        _paymentNotes = null;
+        _payModalOpen = true;
+    }
+    private void ClosePaymentModal() => _payModalOpen = false;
+    private void OnPaymentDateChanged(ChangeEventArgs e) { if (DateOnly.TryParse(e.Value?.ToString(), out var d)) _paymentDate = d; }
+
+    private async Task SavePayment()
+    {
+        var result = await Api.PostJsonAsync<AppResult<int>, CreatePaymentCommand>($"api/properties/{PropertyId}/bookings/{BookingId}/payments", new CreatePaymentCommand(PropertyId, BookingId, _paymentAmount, _paymentMethod, _paymentDate, _paymentStatus, _paymentNotes));
+        if (result?.Success != true) { _error = result?.Message ?? "No se pudo registrar el pago."; return; }
+        _payModalOpen = false;
+        _message = "Pago registrado.";
+        await Load();
+    }
+
+    private async Task DeletePayment(int paymentId)
+    {
+        var result = await Api.DeleteAsync<AppResult>($"api/properties/{PropertyId}/bookings/{BookingId}/payments/{paymentId}");
+        if (result?.Success != true) { _error = result?.Message ?? "No se pudo eliminar el pago."; return; }
+        _message = "Pago eliminado.";
+        await Load();
+    }
+
+    private void OpenCheckInModal() { _operationIsCheckIn = true; _operationTime = TimeOnly.FromDateTime(DateTime.Now); _operationNotes = _booking?.CheckInNotes; _operationModalOpen = true; }
+    private void OpenCheckOutModal() { _operationIsCheckIn = false; _operationTime = TimeOnly.FromDateTime(DateTime.Now); _operationNotes = _booking?.CheckOutNotes; _operationModalOpen = true; }
+    private void CloseOperationModal() => _operationModalOpen = false;
+    private void OnOperationTimeChanged(ChangeEventArgs e) { if (TimeOnly.TryParse(e.Value?.ToString(), out var t)) _operationTime = t; }
+
+    private async Task ConfirmOperation()
+    {
+        _workingOperation = true;
+        var result = await Api.PostJsonAsync<AppResult, CheckInOutCommand>($"api/properties/{PropertyId}/bookings/{BookingId}/{(_operationIsCheckIn ? "check-in" : "check-out")}", new CheckInOutCommand(PropertyId, BookingId, _operationIsCheckIn, _operationTime, _operationNotes, _finalGuestsCount, _documentationVerified, _depositVerified));
+        _workingOperation = false;
+        if (result?.Success != true) { _error = result?.Message ?? "No se pudo guardar la operación."; return; }
+        _operationModalOpen = false;
+        _message = _operationIsCheckIn ? "Check-in realizado." : "Check-out realizado y housekeeping actualizado.";
+        await Load();
+    }
+
+    private void OpenDuplicateModal() => _duplicateModalOpen = true;
+    private void CloseDuplicateModal() => _duplicateModalOpen = false;
+    private void OnDupCheckInChanged(ChangeEventArgs e) { if (DateOnly.TryParse(e.Value?.ToString(), out var d)) _dupCheckIn = d; }
+    private void OnDupCheckOutChanged(ChangeEventArgs e) { if (DateOnly.TryParse(e.Value?.ToString(), out var d)) _dupCheckOut = d; }
+
+    private async Task ConfirmDuplicate()
+    {
+        var result = await Api.PostJsonAsync<AppResult<int>, DuplicateBookingCommand>($"api/properties/{PropertyId}/bookings/{BookingId}/duplicate", new DuplicateBookingCommand(PropertyId, BookingId, _dupCheckIn, _dupCheckOut));
+        if (result?.Success != true || result.Data <= 0) { _error = result?.Message ?? "No se pudo duplicar la reserva."; return; }
+        Nav.NavigateTo($"/bookings/{PropertyId}/{result.Data}");
+    }
+
+    private void GoToEdit() => Nav.NavigateTo($"/bookings/new/{PropertyId}?bookingId={BookingId}");
+    private void Back() => Nav.NavigateTo($"/bookings/grid/{PropertyId}");
+
+    private string PaymentBadgeText() => _booking is null ? "Sin datos" : _booking.PendingAmount <= 0 ? "Pago completo" : _booking.PaidAmount > 0 ? "Pago parcial" : "Pendiente";
+    private string PaymentBadgeClass() => _booking is null ? "bg-secondary" : _booking.PendingAmount <= 0 ? "bg-success" : _booking.PaidAmount > 0 ? "bg-warning text-dark" : "bg-danger";
+    private static string BoolText(bool value) => value ? "Sí" : "No";
+    private static string StatusBadge(BookingStatus s) => s switch { BookingStatus.Tentative => "bg-warning text-dark", BookingStatus.Confirmed => "bg-success", BookingStatus.CheckedIn => "bg-primary", BookingStatus.CheckedOut => "bg-secondary", BookingStatus.Cancelled => "bg-dark", _ => "bg-secondary" };
+    private static string OperationalBadge(BookingOperationalStatus s) => s switch { BookingOperationalStatus.PendingCheckIn => "bg-info text-dark", BookingOperationalStatus.CheckedIn => "bg-primary", BookingOperationalStatus.PendingCheckOut => "bg-warning text-dark", BookingOperationalStatus.CheckedOut => "bg-secondary", _ => "bg-secondary" };
+}

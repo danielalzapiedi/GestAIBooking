@@ -1,0 +1,171 @@
+using GestAI.Application.Abstractions;
+using GestAI.Application.Bookings;
+using GestAI.Application.Common;
+using GestAI.Application.Common.Pricing;
+using GestAI.Domain.Entities;
+using GestAI.Domain.Enums;
+using GestAI.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Xunit;
+
+namespace GestAI.Tests;
+
+public class CommercialAndBookingTests
+{
+    [Fact]
+    public void DateRange_Overlaps_WhenRangesIntersect()
+    {
+        var overlaps = DateRange.Overlaps(new DateOnly(2026, 3, 10), new DateOnly(2026, 3, 15), new DateOnly(2026, 3, 14), new DateOnly(2026, 3, 18));
+        Assert.True(overlaps);
+    }
+
+    [Fact]
+    public void DateRange_DoesNotOverlap_WhenRangesAreConsecutive()
+    {
+        var overlaps = DateRange.Overlaps(new DateOnly(2026, 3, 10), new DateOnly(2026, 3, 15), new DateOnly(2026, 3, 15), new DateOnly(2026, 3, 18));
+        Assert.False(overlaps);
+    }
+
+    [Fact]
+    public void Promotions_ValidateCommercialRules_ReturnsMinimumStayError()
+    {
+        var promotion = new Promotion
+        {
+            Name = "Promo estadía larga",
+            IsActive = true,
+            MinNights = 4,
+            DateFrom = new DateOnly(2026, 1, 1),
+            DateTo = new DateOnly(2026, 12, 31)
+        };
+
+        var errors = CommercialPricing.ValidatePromotionsAndRules([promotion], new DateOnly(2026, 3, 10), new DateOnly(2026, 3, 12), new DateOnly(2026, 3, 1));
+
+        Assert.Contains(errors, x => x.Contains("estadía mínima", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task CommercialPricing_CalculatesWeekendAdjustmentAndPromotion()
+    {
+        await using var db = CreateDbContext(nameof(CommercialPricing_CalculatesWeekendAdjustmentAndPromotion));
+        SeedPricingScenario(db);
+
+        var result = await CommercialPricing.CalculateAsync(db, 1, 1, new DateOnly(2026, 3, 13), new DateOnly(2026, 3, 15), 2, 0, CancellationToken.None);
+
+        Assert.Equal(220m, result.BaseAmount);
+        Assert.Equal(22m, result.PromotionsAmount);
+        Assert.Equal(198m, result.FinalAmount);
+        Assert.Equal(59.40m, result.SuggestedDepositAmount);
+    }
+
+    [Fact]
+    public async Task ChangeBookingStatus_UpdatesBookingAndUnitOperationalState()
+    {
+        await using var db = CreateDbContext(nameof(ChangeBookingStatus_UpdatesBookingAndUnitOperationalState));
+        SeedBookingScenario(db);
+
+        var handler = new ChangeBookingStatusCommandHandler(db, new FakeCurrentUser());
+        var response = await handler.Handle(new ChangeBookingStatusCommand(1, 1, BookingStatus.CheckedOut), CancellationToken.None);
+
+        Assert.True(response.Success);
+
+        var booking = await db.Bookings.Include(x => x.Unit).FirstAsync(x => x.Id == 1);
+        Assert.Equal(BookingStatus.CheckedOut, booking.Status);
+        Assert.Equal(BookingOperationalStatus.CheckedOut, booking.OperationalStatus);
+        Assert.Equal(UnitOperationalStatus.PendingCleaning, booking.Unit.OperationalStatus);
+    }
+
+    private static AppDbContext CreateDbContext(string dbName)
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(dbName)
+            .Options;
+
+        return new AppDbContext(options);
+    }
+
+    private static void SeedPricingScenario(AppDbContext db)
+    {
+        var user = new User { Id = "user-1", Email = "owner@test.com", UserName = "owner@test.com", Nombre = "Owner", Apellido = "Test", DefaultAccountId = 1 };
+        var account = new Account { Id = 1, Name = "Cuenta", OwnerUserId = "user-1", IsActive = true };
+        var property = new Property { Id = 1, AccountId = 1, Account = account, Name = "Alma", IsActive = true, DefaultDepositPercentage = 30m };
+        var unit = new Unit { Id = 1, PropertyId = 1, Property = property, Name = "Suite", IsActive = true, BaseRate = 100m, TotalCapacity = 2, CapacityAdults = 2, CapacityChildren = 0 };
+        var ratePlan = new RatePlan
+        {
+            Id = 1,
+            PropertyId = 1,
+            Property = property,
+            UnitId = 1,
+            Unit = unit,
+            Name = "Base",
+            BaseNightlyRate = 100m,
+            IsActive = true,
+            WeekendAdjustmentEnabled = true,
+            WeekendAdjustmentType = RateAdjustmentType.Percentage,
+            WeekendAdjustmentValue = 20m
+        };
+        var promotion = new Promotion
+        {
+            Id = 1,
+            PropertyId = 1,
+            Property = property,
+            Name = "Promo 10%",
+            IsActive = true,
+            IsDeleted = false,
+            IsCumulative = false,
+            Priority = 1,
+            DateFrom = new DateOnly(2026, 1, 1),
+            DateTo = new DateOnly(2026, 12, 31),
+            ValueType = DiscountValueType.Percentage,
+            Scope = PromotionScope.EntireStay,
+            Value = 10m
+        };
+
+        db.Users.Add(user);
+        db.Accounts.Add(account);
+        db.Properties.Add(property);
+        db.Units.Add(unit);
+        db.RatePlans.Add(ratePlan);
+        db.Promotions.Add(promotion);
+        db.SaveChanges();
+    }
+
+    private static void SeedBookingScenario(AppDbContext db)
+    {
+        var user = new User { Id = "user-1", Email = "owner@test.com", UserName = "owner@test.com", Nombre = "Owner", Apellido = "Test", DefaultAccountId = 1 };
+        var account = new Account { Id = 1, Name = "Cuenta", OwnerUserId = "user-1", IsActive = true };
+        var property = new Property { Id = 1, AccountId = 1, Account = account, Name = "Alma", IsActive = true };
+        var unit = new Unit { Id = 1, PropertyId = 1, Property = property, Name = "Suite", IsActive = true, BaseRate = 100m, OperationalStatus = UnitOperationalStatus.Occupied };
+        var guest = new Guest { Id = 1, PropertyId = 1, Property = property, FullName = "Huésped Demo" };
+        var booking = new Booking
+        {
+            Id = 1,
+            PropertyId = 1,
+            Property = property,
+            UnitId = 1,
+            Unit = unit,
+            GuestId = 1,
+            Guest = guest,
+            BookingCode = "RSV-001",
+            CheckInDate = new DateOnly(2026, 3, 10),
+            CheckOutDate = new DateOnly(2026, 3, 12),
+            Status = BookingStatus.CheckedIn,
+            OperationalStatus = BookingOperationalStatus.CheckedIn,
+            TotalAmount = 200m
+        };
+
+        db.Users.Add(user);
+        db.Accounts.Add(account);
+        db.Properties.Add(property);
+        db.Units.Add(unit);
+        db.Guests.Add(guest);
+        db.Bookings.Add(booking);
+        db.SaveChanges();
+    }
+
+    private sealed class FakeCurrentUser : ICurrentUser
+    {
+        public string UserId => "user-1";
+        public string? Email => "owner@test.com";
+        public string? FullName => "Owner Test";
+    }
+}

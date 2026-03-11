@@ -1,0 +1,285 @@
+﻿/* ============================================================
+   CalendarTimeline - FIX DEFINITIVO
+   - 1 solo scroll vertical (en .calendar-timeline)
+   - resources y grid bajan juntos (sin overflow-y propio)
+   - header "Unidades" sticky
+   - header de días sticky
+   - scroll horizontal solo en .grid
+   Mantiene estilos actuales (colores, paddings, etc.)
+   ============================================================ */
+/* =========================
+   Calendar Timeline (CSS)
+   ========================= */
+
+.calendar-card .calendar-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 0 16px;
+}
+
+    .calendar-card .calendar-toolbar .left,
+    .calendar-card .calendar-toolbar .right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .calendar-card .calendar-toolbar .calendar-title {
+        font-weight: 700;
+        font-size: 18px;
+        margin-left: 8px;
+        text-transform: capitalize;
+    }
+
+/* Container */
+.calendar-timeline {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    border: 1px solid rgba(0, 0, 0, .08);
+    border-radius: 10px;
+    overflow: hidden;
+    /* height: calc(100vh - 288px);*/ /* ajustá si te queda alto/bajo */
+}
+
+    /* Left resources column */
+    .calendar-timeline .resources {
+        background: #0f172a;
+        color: #e5e7eb;
+        /*overflow: auto;*/
+    }
+
+        .calendar-timeline .resources .resources-header {
+            height: 60px;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            padding: 12px;
+            font-weight: 700;
+            background: #0b1220;
+            border-bottom: 1px solid rgba(255, 255, 255, .08);
+        }
+
+        .calendar-timeline .resources .resource-row {
+            height: 60px;
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, .06);
+        }
+
+            .calendar-timeline .resources .resource-row .resource-name {
+                font-weight: 600;
+            }
+
+            .calendar-timeline .resources .resource-row .resource-meta {
+                opacity: .8;
+                font-size: 12px;
+            }
+
+        .calendar-timeline .resources .resources-loading {
+            padding: 12px;
+            opacity: .85;
+        }
+
+    /* Right grid */
+    .calendar-timeline .grid {
+        overflow-x: auto;
+        background: #fff;
+    }
+
+        /* Header row with days */
+        .calendar-timeline .grid .grid-header {
+            height: 60px;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            display: grid;
+            grid-auto-flow: column;
+            grid-auto-columns: 44px; /* ancho de día */
+            background: #fff;
+            border-bottom: 1px solid rgba(0, 0, 0, .08);
+        }
+
+            .calendar-timeline .grid .grid-header .day-cell {
+                padding: 8px 0;
+                text-align: center;
+                border-right: 1px solid rgba(0, 0, 0, .06);
+            }
+
+                .calendar-timeline .grid .grid-header .day-cell .dow {
+                    font-size: 11px;
+                    opacity: .7;
+                }
+
+                .calendar-timeline .grid .grid-header .day-cell .dom {
+                    font-weight: 700;
+                }
+
+                .calendar-timeline .grid .grid-header .day-cell.today {
+                    background: rgba(13, 110, 253, .08);
+                }
+
+        /* Body rows */
+        .calendar-timeline .grid .grid-body .grid-row {
+            height: 60px;
+            position: relative;
+            display: grid;
+            grid-auto-flow: column;
+            grid-auto-columns: 44px;
+            min-height: 44px;
+            border-bottom: 1px solid rgba(0, 0, 0, .06);
+        }
+
+            .calendar-timeline .grid .grid-body .grid-row .cell {
+                border-right: 1px solid rgba(0, 0, 0, .04);
+            }
+
+                .calendar-timeline .grid .grid-body .grid-row .cell.today {
+                    background: rgba(13, 110, 253, .05);
+                }
+
+            /* Booking bar */
+            .calendar-timeline .grid .grid-body .grid-row .booking-bar {
+                position: absolute;
+                left: calc(var(--start) * 44px + 4px);
+                width: calc(var(--len) * 44px - 8px);
+                top: 8px;
+                height: 28px;
+                border-radius: 999px;
+                display: flex;
+                align-items: center;
+                padding: 0 10px;
+                color: #fff;
+                font-weight: 600;
+                font-size: 12px;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+                .calendar-timeline .grid .grid-body .grid-row .booking-bar .booking-text {
+                    opacity: .95;
+                }
+
+                /* Sources colors */
+                .calendar-timeline .grid .grid-body .grid-row .booking-bar.booking {
+                    background: #0d2b6b;
+                }
+
+                .calendar-timeline .grid .grid-body .grid-row .booking-bar.airbnb {
+                    background: #ef4444;
+                }
+
+                .calendar-timeline .grid .grid-body .grid-row .booking-bar.expedia {
+                    background: #d4a72c;
+                    color: #111827;
+                }
+
+                .calendar-timeline .grid .grid-body .grid-row .booking-bar.direct {
+                    background: #111827;
+                }
+
+.booking-bar.tentative {
+    background: #d4a72c;
+    color: #111;
+}
+
+.booking-bar.confirmed {
+    background: #0d2b6b;
+}
+
+.booking-bar.cancelled {
+    background: #6b7280;
+    text-decoration: line-through;
+}
+
+/* 1) El contenedor principal pasa a ser el único scroll vertical */
+.calendar-timeline {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+}
+
+    /* 2) Quitar scroll propio de la columna recursos */
+    .calendar-timeline .resources {
+        overflow-y: hidden !important;
+        overflow-x: hidden !important;
+    }
+
+        /* Header "Unidades" sticky arriba */
+        .calendar-timeline .resources .resources-header {
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 20 !important;
+        }
+
+    /* 3) Grilla: solo scroll horizontal */
+    .calendar-timeline .grid {
+        overflow-x: auto !important;
+        overflow-y: visible !important;
+    }
+
+        /* Header de días sticky arriba (respecto al scroll vertical del timeline) */
+        .calendar-timeline .grid .grid-header {
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 15 !important;
+        }
+
+    /* (Opcional pero recomendado) asegurá misma altura de fila entre resources y grid */
+    .calendar-timeline .resources .resource-row {
+        min-height: 44px; /* coincide con grid-auto-columns de 44px y el alto típico de fila */
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    /* ============================================================
+   CalendarTimeline - Pro SAFE
+   Mantiene:
+   - Scroll vertical sincronizado por JS (resources <-> grid)
+   - Scroll horizontal en la grilla
+   Mejora:
+   - Headers sticky siempre arriba (no se tapan con reservas)
+   - Sombra/borde sutil tipo Google Calendar
+   - Separador resources | grid SIN posiciones absolutas
+   ============================================================ */
+
+    /* --- NO tocar overflows acá --- */
+    /* Tu scroll-sync JS necesita que .resources y .grid sigan pudiendo scrollear */
+
+    /* Header de días: siempre arriba y opaco */
+    .calendar-timeline .grid .grid-header {
+        position: sticky !important;
+        top: 0 !important;
+        background: #fff !important;
+        border-bottom: 1px solid rgba(0,0,0,.06);
+        box-shadow: 0 6px 14px rgba(18, 38, 63, 0.08);
+    }
+
+    /* Header "Unidades": arriba del header de días */
+    .calendar-timeline .resources .resources-header {
+        position: sticky !important;
+        top: 0 !important;
+        /* Importante: que sea opaco para que no se vea lo de abajo */
+        background: linear-gradient(90deg, #0b1a35, #0d224a) !important;
+        border-bottom: 1px solid rgba(255,255,255,.08);
+        box-shadow: 0 6px 14px rgba(18, 38, 63, 0.18);
+    }
+
+    /* Reservas SIEMPRE por debajo del header */
+    .calendar-timeline .booking-pill,
+    .calendar-timeline .booking-item,
+    .calendar-timeline .booking {
+        position: relative;
+    }
+
+    /* Separador resources | grid sin romper layout */
+    .calendar-timeline .grid {
+        border-left: 1px solid rgba(0,0,0,.08);
+    }
+
+        /* Opcional: mejorar contraste de texto de header (sin cambiar estilo) */
+        .calendar-timeline .grid .grid-header * {
+            position: relative;
+        }
+

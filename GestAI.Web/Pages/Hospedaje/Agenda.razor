@@ -1,0 +1,181 @@
+@page "/agenda/{PropertyId:int}"
+@inject ApiClient Api
+@inject NavigationManager Nav
+@using GestAI.Web.Dtos
+
+<div class="pagetitle">
+    <h1>Agenda diaria</h1>
+    <p class="text-muted mb-0">Seguimiento rápido de ingresos, egresos y próximas reservas del hospedaje.</p>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-12 col-md-4 col-xl-3">
+                <label class="form-label">Fecha operativa</label>
+                <input class="form-control" type="date" value="@_dateStr" @onchange="OnDateChanged" />
+            </div>
+            <div class="col-12 col-md-8 col-xl-9 d-flex justify-content-md-end gap-2 flex-wrap">
+                <button class="btn btn-outline-secondary" @onclick="GoTodayAsync"><i class="bi bi-calendar-event"></i> Hoy</button>
+                <button class="btn btn-outline-primary" @onclick="Load"><i class="bi bi-arrow-repeat"></i> Actualizar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (!_loaded)
+{
+    <EmptyState Title="Cargando agenda" Description="Estamos trayendo check-ins, check-outs y reservas próximas." Icon="bi-clock-history" />
+}
+else if (_agenda is null)
+{
+    <EmptyState Title="No se pudo cargar la agenda" Description="Reintentá para visualizar la operación del día." Icon="bi-exclamation-triangle" />
+}
+else
+{
+    <div class="summary-pill-grid mb-3">
+        <div class="summary-pill"><div class="label">Check-ins</div><div class="value">@_agenda.CheckIns.Count</div></div>
+        <div class="summary-pill"><div class="label">Check-outs</div><div class="value">@_agenda.CheckOuts.Count</div></div>
+        <div class="summary-pill"><div class="label">Próximas reservas</div><div class="value">@_agenda.Next7Days.Count</div></div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-12 col-xl-4">
+            @AgendaCard("Check-ins de hoy", _agenda.CheckIns, true, "bi-box-arrow-in-right", "Los ingresos del día con acceso directo a la reserva.")
+        </div>
+        <div class="col-12 col-xl-4">
+            @AgendaCard("Check-outs de hoy", _agenda.CheckOuts, false, "bi-box-arrow-right", "Las salidas previstas y su cierre operativo.")
+        </div>
+        <div class="col-12 col-xl-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+                        <div>
+                            <h5 class="card-title mb-1">Reservas próximas</h5>
+                            <div class="small text-muted">Ingresos previstos durante los próximos 7 días.</div>
+                        </div>
+                        <span class="ui-badge ui-badge-info">@_agenda.Next7Days.Count</span>
+                    </div>
+
+                    @if (_agenda.Next7Days.Count == 0)
+                    {
+                        <EmptyState Title="Sin próximas reservas" Description="Todavía no hay ingresos futuros dentro de la próxima semana." Icon="bi-calendar2-week">
+                            <button class="btn btn-primary" @onclick="GoToNewBooking">Crear reserva</button>
+                        </EmptyState>
+                    }
+                    else
+                    {
+                        <div class="agenda-stack">
+                            @foreach (var booking in _agenda.Next7Days)
+                            {
+                                <div class="agenda-booking-card">
+                                    <div class="agenda-booking-top">
+                                        <div>
+                                            <div class="fw-semibold">@booking.UnitName</div>
+                                            <div class="small text-muted">@booking.GuestName</div>
+                                        </div>
+                                        <span class="ui-badge ui-badge-info">@booking.CheckInDate.ToString("dd/MM")</span>
+                                    </div>
+                                    <div class="agenda-meta">
+                                        <span><i class="bi bi-moon"></i> @booking.CheckInDate.ToString("dd/MM") → @booking.CheckOutDate.ToString("dd/MM")</span>
+                                    </div>
+                                    <div class="d-flex gap-2 mt-3 flex-wrap">
+                                        <button class="btn btn-sm btn-outline-primary" @onclick="() => OpenBooking(booking.BookingId)"><i class="bi bi-eye"></i> Ver detalle</button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int PropertyId { get; set; }
+    private bool _loaded;
+    private DailyAgendaDto? _agenda;
+    private DateOnly _date = DateOnly.FromDateTime(DateTime.Today);
+    private string _dateStr => _date.ToString("yyyy-MM-dd");
+
+    protected override async Task OnParametersSetAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loaded = false;
+        _agenda = (await Api.GetAsync<AppResult<DailyAgendaDto>>($"api/properties/{PropertyId}/agenda/daily?date={_date:yyyy-MM-dd}"))?.Data;
+        _loaded = true;
+    }
+
+    private void OnDateChanged(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), out var d))
+            _date = d;
+    }
+
+    private async Task GoTodayAsync()
+    {
+        _date = DateOnly.FromDateTime(DateTime.Today);
+        await Load();
+    }
+
+    private void GoToNewBooking() => Nav.NavigateTo($"/bookings/new/{PropertyId}");
+
+    private RenderFragment AgendaCard(string title, List<AgendaBookingDto> items, bool isCheckIn, string icon, string description) => __builder =>
+    {
+        var seq = 0;
+        __builder.OpenElement(seq++, "div");
+        __builder.AddAttribute(seq++, "class", "card h-100");
+        __builder.OpenElement(seq++, "div");
+        __builder.AddAttribute(seq++, "class", "card-body");
+        __builder.AddMarkupContent(seq++, $"<div class='d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3'><div><h5 class='card-title mb-1'>{title}</h5><div class='small text-muted'>{description}</div></div><span class='ui-badge {(isCheckIn ? "ui-badge-success" : "ui-badge-warning")}'>{items.Count}</span></div>");
+
+        if (items.Count == 0)
+        {
+            __builder.OpenComponent<EmptyState>(seq++);
+            __builder.AddAttribute(seq++, "Title", isCheckIn ? "No hay ingresos programados" : "No hay salidas programadas");
+            __builder.AddAttribute(seq++, "Description", isCheckIn ? "La jornada no tiene check-ins pendientes." : "La jornada no tiene check-outs pendientes.");
+            __builder.AddAttribute(seq++, "Icon", icon);
+            __builder.CloseComponent();
+        }
+        else
+        {
+            __builder.OpenElement(seq++, "div");
+            __builder.AddAttribute(seq++, "class", "agenda-stack");
+            foreach (var booking in items)
+            {
+                __builder.OpenElement(seq++, "div");
+                __builder.AddAttribute(seq++, "class", "agenda-booking-card");
+                __builder.AddMarkupContent(seq++, $"<div class='agenda-booking-top'><div><div class='fw-semibold'>{booking.UnitName}</div><div class='small text-muted'>{booking.GuestName}</div></div><span class='ui-badge {(isCheckIn ? "ui-badge-success" : "ui-badge-warning")}'>{(isCheckIn ? "Ingreso" : "Salida")}</span></div>");
+                __builder.AddMarkupContent(seq++, $"<div class='agenda-meta'><span><i class='bi bi-calendar-event'></i> {booking.CheckInDate:dd/MM} → {booking.CheckOutDate:dd/MM}</span></div>");
+                __builder.OpenElement(seq++, "div");
+                __builder.AddAttribute(seq++, "class", "d-flex gap-2 mt-3 flex-wrap");
+                __builder.OpenElement(seq++, "button");
+                __builder.AddAttribute(seq++, "class", "btn btn-sm btn-outline-primary");
+                __builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, () => OpenBooking(booking.BookingId)));
+                __builder.AddContent(seq++, "Ver detalle");
+                __builder.CloseElement();
+                __builder.OpenElement(seq++, "button");
+                __builder.AddAttribute(seq++, "class", isCheckIn ? "btn btn-sm btn-success" : "btn btn-sm btn-warning");
+                __builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, () => DoOperation(booking.BookingId, isCheckIn)));
+                __builder.AddContent(seq++, isCheckIn ? "Registrar check-in" : "Registrar check-out");
+                __builder.CloseElement();
+                __builder.CloseElement();
+                __builder.CloseElement();
+            }
+            __builder.CloseElement();
+        }
+
+        __builder.CloseElement();
+        __builder.CloseElement();
+    };
+
+    private void OpenBooking(int bookingId) => Nav.NavigateTo($"/bookings/{PropertyId}/{bookingId}");
+
+    private async Task DoOperation(int bookingId, bool isCheckIn)
+    {
+        await Api.PostJsonAsync<AppResult, CheckInOutCommand>($"api/properties/{PropertyId}/bookings/{bookingId}/{(isCheckIn ? "check-in" : "check-out")}", new CheckInOutCommand(PropertyId, bookingId, isCheckIn, TimeOnly.FromDateTime(DateTime.Now), null, null, true, true));
+        await Load();
+    }
+}

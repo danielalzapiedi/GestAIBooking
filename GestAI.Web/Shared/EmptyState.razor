@@ -1,0 +1,23 @@
+<div class="ui-empty-state @Class">
+    @if (!string.IsNullOrWhiteSpace(Icon))
+    {
+        <div class="ui-empty-state-icon"><i class="bi @Icon"></i></div>
+    }
+    <div class="ui-empty-state-title">@Title</div>
+    @if (!string.IsNullOrWhiteSpace(Description))
+    {
+        <div class="ui-empty-state-description">@Description</div>
+    }
+    @if (ChildContent is not null)
+    {
+        <div class="ui-empty-state-actions">@ChildContent</div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Sin datos";
+    [Parameter] public string? Description { get; set; }
+    [Parameter] public string? Icon { get; set; } = "bi-inbox";
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

@@ -1,0 +1,104 @@
+@page "/units/{PropertyId:int}/new"
+@page "/units/{PropertyId:int}/{UnitId:int}/edit"
+@using GestAI.Web.Dtos
+@inject ApiClient Api
+@inject NavigationManager Nav
+
+<PageTitle>@(UnitId.HasValue ? "Editar unidad" : "Nueva unidad")</PageTitle>
+
+<div class="pagetitle d-flex justify-content-between align-items-center">
+    <div>
+        <h1>@(UnitId.HasValue ? "Editar unidad" : "Nueva unidad")</h1>
+        <p class="text-muted mb-0">Completá los datos operativos y comerciales de la unidad.</p>
+    </div>
+    <button class="btn btn-light border" @onclick='() => Nav.NavigateTo($"/units/{PropertyId}")'>Volver</button>
+</div>
+
+@if (!_loaded)
+{
+    <EmptyState Title="Cargando unidad" Description="Estamos trayendo la información operativa y comercial." Icon="bi-house" />
+}
+else
+{
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="alert @(_success ? "alert-success" : "alert-danger")">@_message</div>
+    }
+
+    <EditForm Model="_model" OnValidSubmit="Save">
+        <div class="card"><div class="card-body pt-3"><div class="row g-3">
+            <div class="col-md-6"><label class="form-label">Nombre</label><input class="form-control" @bind="_model.Name" /></div>
+            <div class="col-md-3"><label class="form-label">Activa</label><select class="form-select" @bind="_model.IsActive"><option value="true">Sí</option><option value="false">No</option></select></div>
+            <div class="col-md-3"><label class="form-label">Orden</label><input class="form-control" type="number" @bind="_model.DisplayOrder" /></div>
+            <div class="col-md-3"><label class="form-label">Adultos</label><input class="form-control" type="number" @bind="_model.CapacityAdults" /></div>
+            <div class="col-md-3"><label class="form-label">Niños</label><input class="form-control" type="number" @bind="_model.CapacityChildren" /></div>
+            <div class="col-md-3"><label class="form-label">Capacidad total</label><input class="form-control" type="number" @bind="_model.TotalCapacity" /></div>
+            <div class="col-md-3"><label class="form-label">Tarifa base</label><input class="form-control" type="number" step="0.01" @bind="_model.BaseRate" /></div>
+            <div class="col-md-4"><label class="form-label">Estado operativo</label><select class="form-select" @bind="_model.OperationalStatus">@foreach (var status in Enum.GetValues<UnitOperationalStatus>()){<option value="@status">@status</option>}</select></div>
+            <div class="col-12"><label class="form-label">Descripción corta</label><textarea class="form-control" rows="3" @bind="_model.ShortDescription"></textarea></div>
+            <div class="col-12 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary" @onclick='() => Nav.NavigateTo($"/units/{PropertyId}")'>Cancelar</button>
+                <button type="submit" class="btn btn-primary" disabled="@_saving">@(_saving ? "Guardando..." : "Guardar")</button>
+            </div>
+        </div></div></div>
+    </EditForm>
+}
+
+@code {
+    [Parameter] public int PropertyId { get; set; }
+    [Parameter] public int? UnitId { get; set; }
+
+    private UnitListItemDto _model = null!;
+    private bool _loaded;
+    private string? _message;
+    private bool _saving;
+    private bool _success;
+
+    private UnitListItemDto NewModel() => new()
+    {
+        PropertyId = PropertyId,
+        Name = string.Empty,
+        CapacityAdults = 2,
+        CapacityChildren = 0,
+        IsActive = true,
+        BaseRate = 0,
+        TotalCapacity = 2,
+        ShortDescription = null,
+        DisplayOrder = 0,
+        OperationalStatus = UnitOperationalStatus.Available
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _message = null;
+        if (!UnitId.HasValue)
+        {
+            _model = NewModel();
+            _loaded = true;
+            return;
+        }
+
+        var res = await Api.GetAsync<AppResult<UnitListItemDto>>($"api/properties/{PropertyId}/units/{UnitId}");
+        _model = res?.Data ?? NewModel();
+        _loaded = true;
+    }
+
+    private async Task Save()
+    {
+        _saving = true;
+        var cmd = new UpsertUnitCommand(PropertyId, UnitId, _model.Name, _model.CapacityAdults, _model.CapacityChildren, _model.BaseRate, _model.TotalCapacity, _model.ShortDescription, _model.IsActive, _model.DisplayOrder, _model.OperationalStatus);
+        try
+        {
+            AppResult<int>? res = UnitId.HasValue
+                ? await Api.PutAsync<UpsertUnitCommand, AppResult<int>>($"api/properties/{PropertyId}/units/{UnitId}", cmd)
+                : await Api.PostAsync<UpsertUnitCommand, AppResult<int>>($"api/properties/{PropertyId}/units", cmd);
+            _success = res?.Success == true;
+            _message = _success ? "Unidad guardada correctamente." : (res?.Message ?? "No se pudo guardar la unidad.");
+            if (_success && res?.Data is int id) Nav.NavigateTo($"/units/{PropertyId}/{id}/edit", false);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

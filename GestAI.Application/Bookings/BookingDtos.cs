@@ -1,0 +1,112 @@
+using GestAI.Application.Common.Pricing;
+using GestAI.Domain.Enums;
+
+namespace GestAI.Application.Bookings;
+
+public sealed record BookingEventDto(int Id, BookingEventType EventType, string Title, string? Detail, string? ChangedByName, DateTime ChangedAtUtc);
+
+public sealed record BookingListItemDto(
+    int Id,
+    int PropertyId,
+    int UnitId,
+    string UnitName,
+    int GuestId,
+    string GuestName,
+    string BookingCode,
+    DateOnly CheckInDate,
+    DateOnly CheckOutDate,
+    int Adults,
+    int Children,
+    BookingStatus Status,
+    BookingSource Source,
+    BookingOperationalStatus OperationalStatus,
+    decimal TotalAmount,
+    decimal PendingAmount,
+    int Nights,
+    decimal ExpectedDepositAmount,
+    bool CreatedFromQuote,
+    string? Tags);
+
+public sealed record BookingDetailDto(
+    int Id,
+    int PropertyId,
+    int UnitId,
+    string UnitName,
+    int GuestId,
+    string GuestName,
+    string? GuestPhone,
+    string? GuestEmail,
+    string? GuestDocumentNumber,
+    string BookingCode,
+    DateOnly CheckInDate,
+    DateOnly CheckOutDate,
+    int Adults,
+    int Children,
+    BookingStatus Status,
+    BookingSource Source,
+    BookingOperationalStatus OperationalStatus,
+    decimal TotalAmount,
+    decimal PaidAmount,
+    decimal PendingAmount,
+    decimal AverageNightlyRate,
+    int Nights,
+    decimal BaseAmount,
+    decimal PromotionsAmount,
+    decimal ExpectedDepositAmount,
+    DateOnly? DepositDueDate,
+    bool DepositVerified,
+    bool DocumentationVerified,
+    bool ManualPriceOverride,
+    bool CreatedFromQuote,
+    string? AppliedPromotionNames,
+    string? CancellationPolicyApplied,
+    string? CancellationReason,
+    string? Tags,
+    int FinalGuestsCount,
+    TimeOnly? ActualCheckInTime,
+    TimeOnly? ActualCheckOutTime,
+    string? CheckInNotes,
+    string? CheckOutNotes,
+    string? Notes,
+    string? InternalNotes,
+    string? GuestVisibleNotes,
+    DateTime CreatedAt,
+    DateTime UpdatedAt,
+    bool HasCleaningTaskPending,
+    List<BookingEventDto> Timeline,
+    List<PricingLineDto> PricingLines);
+
+public sealed record CalendarBookingDto(
+    int Id,
+    int UnitId,
+    int GuestId,
+    string GuestName,
+    string BookingCode,
+    DateOnly CheckInDate,
+    DateOnly CheckOutDate,
+    BookingStatus Status,
+    BookingSource Source,
+    BookingOperationalStatus OperationalStatus,
+    decimal TotalAmount,
+    decimal PendingAmount);
+
+public sealed record CheckInOutCommand(
+    int PropertyId,
+    int BookingId,
+    bool IsCheckIn,
+    TimeOnly? ActualTime,
+    string? Notes,
+    int? FinalGuestsCount,
+    bool DocumentationVerified,
+    bool DepositVerified) : MediatR.IRequest<Common.AppResult>;
+
+public sealed record DuplicateBookingCommand(
+    int PropertyId,
+    int SourceBookingId,
+    DateOnly CheckInDate,
+    DateOnly CheckOutDate,
+    int? UnitId = null,
+    int? GuestId = null,
+    int? Adults = null,
+    int? Children = null,
+    string? Notes = null) : MediatR.IRequest<Common.AppResult<int>>;

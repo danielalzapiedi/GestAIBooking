@@ -1,0 +1,250 @@
+@page "/dashboard/{PropertyId:int}"
+@using GestAI.Web.Dtos
+@inject ApiClient Api
+
+<PageTitle>Dashboard</PageTitle>
+
+<div class="pagetitle d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+        <h1>Dashboard</h1>
+        <p class="text-muted mb-0">Resumen operativo y comercial del hospedaje para tomar decisiones rápidas.</p>
+    </div>
+    <button class="btn btn-outline-primary" @onclick="LoadAsync"><i class="bi bi-arrow-repeat"></i> Actualizar</button>
+</div>
+
+@if (_data is null)
+{
+    <EmptyState Title="Cargando dashboard" Description="Estamos trayendo indicadores, reservas próximas y alertas operativas." Icon="bi-speedometer2" />
+}
+else
+{
+    <div class="row g-3 mb-1">
+        <div class="col-12 col-md-6 col-xl-3">
+            <div class="card kpi-card">
+                <div class="card-body">
+                    <div class="kpi-label">Ocupación del mes</div>
+                    <div class="kpi-value">@FormatPercent(_data.OccupancyPercentMonth)</div>
+                    <div class="kpi-help">Capacidad ocupada durante el mes en curso.</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-6 col-xl-3">
+            <div class="card kpi-card">
+                <div class="card-body">
+                    <div class="kpi-label">Ingresos cobrados</div>
+                    <div class="kpi-value">@FormatMoney(_data.CollectedIncomeMonth)</div>
+                    <div class="kpi-help">Pagos efectivamente cobrados en el mes.</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-6 col-xl-3">
+            <div class="card kpi-card">
+                <div class="card-body">
+                    <div class="kpi-label">Saldo pendiente</div>
+                    <div class="kpi-value">@FormatMoney(_data.PendingBalanceTotal)</div>
+                    <div class="kpi-help">Importe aún no cobrado en reservas activas.</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-6 col-xl-3">
+            <div class="card kpi-card">
+                <div class="card-body">
+                    <div class="kpi-label">Movimientos de hoy</div>
+                    <div class="kpi-value">@(_data.CheckInsToday + _data.CheckOutsToday)</div>
+                    <div class="kpi-help">@_data.CheckInsToday check-ins · @_data.CheckOutsToday check-outs</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-1">
+        <div class="col-12 col-xl-7">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                        <h5 class="card-title mb-0">Reservas próximas</h5>
+                        <span class="ui-badge ui-badge-info">@_data.UpcomingBookings.Count reserva(s)</span>
+                    </div>
+
+                    @if (_data.UpcomingBookings.Count == 0)
+                    {
+                        <EmptyState Title="No hay reservas próximas" Description="Cuando existan ingresos cercanos vas a verlos acá con su saldo pendiente." Icon="bi-calendar-check" />
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>Reserva</th>
+                                        <th>Huésped</th>
+                                        <th>Unidad</th>
+                                        <th>Ingreso</th>
+                                        <th class="text-end">Saldo</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                @foreach (var booking in _data.UpcomingBookings)
+                                {
+                                    <tr>
+                                        <td><strong>@booking.BookingCode</strong><div class="small text-muted">@booking.CheckInDate.ToString("dd/MM") al @booking.CheckOutDate.ToString("dd/MM")</div></td>
+                                        <td>@booking.GuestName</td>
+                                        <td>@booking.UnitName</td>
+                                        <td>@booking.CheckInDate.ToString("dd/MM")</td>
+                                        <td class="text-end">@FormatMoney(booking.PendingAmount)</td>
+                                    </tr>
+                                }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-xl-5">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                        <h5 class="card-title mb-0">Alertas operativas</h5>
+                        <span class="ui-badge @AlertBadgeClass()">@AlertBadgeText()</span>
+                    </div>
+
+                    <div class="agenda-stack">
+                        <div class="agenda-booking-card">
+                            <div class="agenda-booking-top">
+                                <div>
+                                    <div class="fw-semibold">Check-ins de hoy</div>
+                                    <div class="small text-muted">Ingresos previstos para la jornada.</div>
+                                </div>
+                                <span class="ui-badge ui-badge-success">@_data.CheckInsToday</span>
+                            </div>
+                        </div>
+                        <div class="agenda-booking-card">
+                            <div class="agenda-booking-top">
+                                <div>
+                                    <div class="fw-semibold">Check-outs de hoy</div>
+                                    <div class="small text-muted">Salidas previstas y recambio operativo.</div>
+                                </div>
+                                <span class="ui-badge ui-badge-warning">@_data.CheckOutsToday</span>
+                            </div>
+                        </div>
+                        <div class="agenda-booking-card">
+                            <div class="agenda-booking-top">
+                                <div>
+                                    <div class="fw-semibold">Cobros pendientes</div>
+                                    <div class="small text-muted">Seguimiento comercial recomendado.</div>
+                                </div>
+                                <span class="ui-badge ui-badge-danger">@FormatMoney(_data.PendingBalanceTotal)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-12 col-xl-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Reservas por estado</h5>
+                    @if (_data.BookingsByStatus.Count == 0)
+                    {
+                        <EmptyState Title="Sin reservas para resumir" Description="Todavía no hay reservas registradas en este hospedaje." Icon="bi-bar-chart" />
+                    }
+                    else
+                    {
+                        <div class="report-bars mt-3">
+                            @foreach (var item in _data.BookingsByStatus)
+                            {
+                                <div class="report-bar-item">
+                                    <div class="fw-semibold">@TranslateStatus(item.Status)</div>
+                                    <div class="report-bar-track">
+                                        <div class="report-bar-fill" style="width:@PercentWidth(item.Count, MaxStatusCount)%"></div>
+                                    </div>
+                                    <div class="text-end fw-semibold">@item.Count</div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-xl-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Tendencia de ingresos</h5>
+                    <div class="mini-chart-list mt-3">
+                        @foreach (var item in _data.IncomeByMonth)
+                        {
+                            <div class="mini-chart-item">
+                                <div class="fw-semibold">@item.Label</div>
+                                <div class="mini-chart-bar"><div class="mini-chart-fill" style="width:@PercentWidth(item.Value, MaxIncome)%"></div></div>
+                                <div class="text-end small fw-semibold">@FormatMoney(item.Value)</div>
+                            </div>
+                        }
+                    </div>
+
+                    <hr />
+
+                    <h6 class="fw-bold mb-3">Ocupación mensual</h6>
+                    <div class="mini-chart-list">
+                        @foreach (var item in _data.OccupancyByMonth)
+                        {
+                            <div class="mini-chart-item">
+                                <div class="fw-semibold">@item.Label</div>
+                                <div class="mini-chart-bar"><div class="mini-chart-fill" style="width:@Math.Min(100m, item.Value)%"></div></div>
+                                <div class="text-end small fw-semibold">@FormatPercent(item.Value)</div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int PropertyId { get; set; }
+    private DashboardSummaryDto? _data;
+
+    private decimal MaxIncome => _data?.IncomeByMonth.Count > 0 ? _data.IncomeByMonth.Max(x => x.Value) : 0m;
+    private int MaxStatusCount => _data?.BookingsByStatus.Count > 0 ? _data.BookingsByStatus.Max(x => x.Count) : 0;
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync() => _data = (await Api.GetAsync<AppResult<DashboardSummaryDto>>($"api/properties/{PropertyId}/dashboard"))?.Data;
+
+    private static string FormatMoney(decimal value) => value.ToString("0.00");
+    private static string FormatPercent(decimal value) => $"{value:0.##}%";
+
+    private static decimal PercentWidth(decimal value, decimal max)
+        => max <= 0 ? 8m : Math.Max(8m, Math.Min(100m, decimal.Round(value * 100m / max, 2)));
+
+    private string AlertBadgeText()
+    {
+        if (_data is null) return "Sin datos";
+        if (_data.CheckInsToday + _data.CheckOutsToday + (_data.PendingBalanceTotal > 0 ? 1 : 0) == 0) return "Sin alertas";
+        if (_data.PendingBalanceTotal > 0) return "Requiere atención";
+        return "Operación normal";
+    }
+
+    private string AlertBadgeClass()
+    {
+        if (_data is null) return "ui-badge ui-badge-neutral";
+        if (_data.PendingBalanceTotal > 0) return "ui-badge ui-badge-warning";
+        if (_data.CheckInsToday > 0 || _data.CheckOutsToday > 0) return "ui-badge ui-badge-info";
+        return "ui-badge ui-badge-success";
+    }
+
+    private static string TranslateStatus(string status) => status?.Trim().ToLowerInvariant() switch
+    {
+        "tentative" => "Tentativa",
+        "confirmed" => "Confirmada",
+        "checkedin" => "Check-in",
+        "checkedout" => "Check-out",
+        "cancelled" => "Cancelada",
+        _ => status
+    };
+}

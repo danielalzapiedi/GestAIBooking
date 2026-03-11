@@ -1,0 +1,131 @@
+################################################################################
+# .NET / Visual Studio
+################################################################################
+# VS / Rider / MonoDevelop
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.csproj.user
+*.pidb
+*.userprefs
+
+# Build outputs
+bin/
+obj/
+out/
+artifacts/
+Debug/
+Release/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+[Bb]uild/
+[Ll]og/
+*.log
+
+# Test
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+.coverage/
+coverage/
+.nyc_output/
+
+# NuGet
+*.nupkg
+*.snupkg
+*.nuspec
+packages/
+# Lockfiles se versionan normalmente, por eso NO se ignoran:
+#!packages.lock.json
+
+# Publish
+publish/
+*.Publish.xml
+*.pubxml.user
+# .pubxml suele versionarse; el .user no
+Properties/PublishProfiles/*.pubxml.user
+
+################################################################################
+# EF Core
+################################################################################
+# Migraciones: por defecto se deben versionar
+# Migrations/
+
+# DB locales de desarrollo
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.mdf
+*.ldf
+
+################################################################################
+# Config / Secretos
+################################################################################
+# Archivos locales (no compartidos)
+*.local.json
+*.*.local.json
+appsettings.Local.json
+appsettings.*.Local.json
+
+# User secrets están fuera del repo por defecto, no hace falta ignorarlos.
+# Si querés ignorar appsettings de dev, descomentá:
+# appsettings.Development.json
+
+################################################################################
+# Web / Frontend (Blazor WASM / Node / Vite / Angular)
+################################################################################
+node_modules/
+npm-debug.log*
+yarn.lock # si NO querés versionarlo (muchos sí lo versionan)
+yarn-error.log
+pnpm-lock.yaml # idem arriba
+pnpm-debug.log
+package-lock.json # idem arriba (se suele versionar)
+dist/
+build/
+.temp/
+.tmp/
+.cache/
+.eslintcache
+
+# Bundles / assets generados
+wwwroot/dist/
+wwwroot/.cache/
+*.map
+
+################################################################################
+# SO / Herramientas
+################################################################################
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Archivos temporales
+*.swp
+*.swm
+*.tmp
+*.bak
+*.orig
+*.patch
+
+# Compresos / backups
+*.zip
+*.7z
+*.rar
+*.gz
+*.tar

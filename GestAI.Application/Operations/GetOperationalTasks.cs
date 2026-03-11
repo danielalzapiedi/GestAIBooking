@@ -1,0 +1,55 @@
+using GestAI.Application.Abstractions;
+using GestAI.Application.Common;
+using GestAI.Domain.Enums;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+
+namespace GestAI.Application.Operations;
+
+public sealed record GetOperationalTasksQuery(int PropertyId, OperationalTaskStatus? Status = null, OperationalTaskType? Type = null) : IRequest<AppResult<List<OperationalTaskDto>>>;
+
+public sealed class GetOperationalTasksQueryHandler : IRequestHandler<GetOperationalTasksQuery, AppResult<List<OperationalTaskDto>>>
+{
+    private readonly IAppDbContext _db;
+    private readonly ICurrentUser _current;
+
+    public GetOperationalTasksQueryHandler(IAppDbContext db, ICurrentUser current)
+    {
+        _db = db;
+        _current = current;
+    }
+
+    public async Task<AppResult<List<OperationalTaskDto>>> Handle(GetOperationalTasksQuery request, CancellationToken ct)
+    {
+        var query = _db.OperationalTasks.AsNoTracking()
+            .Where(x => x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)));
+
+        if (request.Status.HasValue)
+            query = query.Where(x => x.Status == request.Status.Value);
+        if (request.Type.HasValue)
+            query = query.Where(x => x.Type == request.Type.Value);
+
+        var data = await query
+            .OrderBy(x => x.Status)
+            .ThenByDescending(x => x.Priority)
+            .ThenBy(x => x.ScheduledDate)
+            .Select(x => new OperationalTaskDto(
+                x.Id,
+                x.PropertyId,
+                x.UnitId,
+                x.Unit != null ? x.Unit.Name : null,
+                x.BookingId,
+                x.Booking != null ? x.Booking.BookingCode : null,
+                x.Type,
+                x.Status,
+                x.Priority,
+                x.ScheduledDate,
+                x.Title,
+                x.Notes,
+                x.CreatedAtUtc,
+                x.CompletedAtUtc))
+            .ToListAsync(ct);
+
+        return AppResult<List<OperationalTaskDto>>.Ok(data);
+    }
+}

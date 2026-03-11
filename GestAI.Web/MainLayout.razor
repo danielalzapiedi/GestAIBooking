@@ -1,0 +1,457 @@
+@inherits LayoutComponentBase
+@inject ApiClient Api
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthProvider
+@inject JwtAuthStateProvider Auth
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+@inject ITokenStore TokenStore
+@using System.Security.Claims
+@using GestAI.Web.Dtos
+
+<AuthorizeView>
+    <Authorized>
+        <header id="header" class="header fixed-top d-flex align-items-center app-header-shell">
+            <div class="d-flex align-items-center justify-content-between w-100 gap-3">
+                <div class="d-flex align-items-center gap-3">
+                    <a href="@DashboardHref" class="logo d-flex align-items-center text-decoration-none">
+                        <div class="app-logo-mark">
+                            <i class="bi bi-house-heart"></i>
+                        </div>
+                        <div>
+                            <span class="d-block app-brand-title">GestAI Booking</span>
+                            <small class="app-brand-subtitle">Gestión operativa para hospedajes</small>
+                        </div>
+                    </a>
+                    <i class="bi bi-list toggle-sidebar-btn"></i>
+                </div>
+
+                <div class="ms-auto d-none d-md-flex align-items-center">
+                    <div class="dropdown">
+                        <a class="btn btn-sm btn-outline-primary app-property-switcher dropdown-toggle"
+                           href="#"
+                           data-bs-toggle="dropdown"
+                           aria-expanded="false"
+                           @onclick:preventDefault="true">
+                            <i class="bi bi-house-heart me-1"></i>
+                            <span>@CurrentPropertyLabel</span>
+                        </a>
+
+                        <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow shadow-sm">
+                            @if (!_propertiesLoaded)
+                            {
+                                <li class="dropdown-item text-muted">Cargando hospedajes...</li>
+                            }
+                            else if (_properties.Count == 0)
+                            {
+                                <li class="dropdown-item text-muted">Todavía no tenés hospedajes cargados.</li>
+                                <li><hr class="dropdown-divider" /></li>
+                                <li>
+                                    <a class="dropdown-item" @onclick="GoToProperties">
+                                        <i class="bi bi-plus-circle me-1"></i> Crear hospedaje
+                                    </a>
+                                </li>
+                            }
+                            else
+                            {
+                                @foreach (var p in _properties)
+                                {
+                                    <li>
+                                        <a class="dropdown-item d-flex justify-content-between align-items-center"
+                                           href="#"
+                                           @onclick:preventDefault="true"
+                                           @onclick="@(() => SelectProperty(p.Id))">
+                                            <span>
+                                                @p.Name
+                                                @if (_defaultPropertyId == p.Id)
+                                                {
+                                                    <span class="badge rounded-pill bg-primary-subtle text-primary ms-2">Activo</span>
+                                                }
+                                            </span>
+                                            @if (_defaultPropertyId == p.Id)
+                                            {
+                                                <i class="bi bi-check2 text-success"></i>
+                                            }
+                                        </a>
+                                    </li>
+                                }
+
+                                <li><hr class="dropdown-divider" /></li>
+                                <li>
+                                    <a class="dropdown-item" @onclick="GoToProperties">
+                                        <i class="bi bi-grid me-1"></i> Ver hospedajes
+                                    </a>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+
+                <nav class="header-nav">
+                    <ul class="d-flex align-items-center mb-0">
+                        <li class="nav-item dropdown pe-0">
+                            <a class="nav-link nav-profile d-flex align-items-center pe-0" href="#" data-bs-toggle="dropdown" @onclick:preventDefault="true">
+                                <div class="profile-circle">@_initials</div>
+                                <span class="d-none d-md-block dropdown-toggle ps-2">@_fullName</span>
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow profile">
+                                <li class="dropdown-header">
+                                    <h6>@_fullName</h6>
+                                    <span>@_email</span>
+                                    <div><span class="badge bg-info-subtle text-dark mt-2">@RoleLabel</span></div>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <a class="dropdown-item d-flex align-items-center" href="#" @onclick:preventDefault="true" @onclick="Logout">
+                                        <i class="bi bi-box-arrow-right"></i>
+                                        <span>Cerrar sesión</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </header>
+
+        <aside id="sidebar" class="sidebar app-sidebar">
+            <div class="app-sidebar-property d-md-none mb-3">
+                <div class="small text-uppercase text-muted fw-semibold mb-1">Hospedaje activo</div>
+                <div class="fw-semibold">@CurrentPropertyLabel</div>
+            </div>
+
+            <ul class="sidebar-nav" id="sidebar-nav">
+                @if (_setupLoaded && _needsSetup)
+                {
+                    <li class="sidebar-section-label mt-0">Configuración</li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link" href="/setup" Match="NavLinkMatch.Prefix">
+                            <i class="bi bi-wrench-adjustable-circle"></i>
+                            <span>Configuración inicial</span>
+                        </NavLink>
+                    </li>
+                }
+
+                <li class="sidebar-section-label">Operación</li>
+                <li class="nav-item app-sidebar-group">
+                    <button type="button" class="nav-link sidebar-group-toggle @(IsGroupOpen("operacion") ? "" : "collapsed")" @onclick='() => ToggleGroup("operacion")'>
+                        <i class="bi bi-speedometer2"></i>
+                        <span>Operación</span>
+                        <i class="bi bi-chevron-down ms-auto"></i>
+                    </button>
+                    <ul class="nav-content collapse @(IsGroupOpen("operacion") ? "show" : "")">
+                        <li><NavLink class="sidebar-sub-link" href="@DashboardHref" Match="NavLinkMatch.Prefix"><i class="bi bi-grid"></i><span>Dashboard</span></NavLink></li>
+                        <li><NavLink class="sidebar-sub-link" href="@CalendarTimelineHref" Match="NavLinkMatch.Prefix"><i class="bi bi-calendar3"></i><span>Calendario</span></NavLink></li>
+                        <li><NavLink class="sidebar-sub-link" href="@BookingsListHref" Match="NavLinkMatch.Prefix"><i class="bi bi-journal-bookmark"></i><span>Reservas</span></NavLink></li>
+                        <li><NavLink class="sidebar-sub-link" href="@AgendaHref" Match="NavLinkMatch.Prefix"><i class="bi bi-clock-history"></i><span>Agenda</span></NavLink></li>
+                        <li><NavLink class="sidebar-sub-link" href="@HousekeepingHref" Match="NavLinkMatch.Prefix"><i class="bi bi-brush"></i><span>Limpieza</span></NavLink></li>
+                        <li><NavLink class="sidebar-sub-link" href="@GuestsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-people"></i><span>Huéspedes</span></NavLink></li>
+                    </ul>
+                </li>
+
+                <li class="sidebar-section-label">Comercial</li>
+                <li class="nav-item app-sidebar-group">
+                    <button type="button" class="nav-link sidebar-group-toggle @(IsGroupOpen("comercial") ? "" : "collapsed")" @onclick='() => ToggleGroup("comercial")'>
+                        <i class="bi bi-graph-up-arrow"></i>
+                        <span>Comercial</span>
+                        <i class="bi bi-chevron-down ms-auto"></i>
+                    </button>
+                    <ul class="nav-content collapse @(IsGroupOpen("comercial") ? "show" : "")">
+                        <li><NavLink class="sidebar-sub-link" href="@QuotesHref" Match="NavLinkMatch.All"><i class="bi bi-calculator"></i><span>Cotizador</span></NavLink></li>
+                        <li><NavLink class="sidebar-sub-link" href="@SavedQuotesHref" Match="NavLinkMatch.All"><i class="bi bi-save2"></i><span>Cotizaciones guardadas</span></NavLink></li>
+                        <li><NavLink class="sidebar-sub-link" href="@RatesHref" Match="NavLinkMatch.Prefix"><i class="bi bi-tags"></i><span>Tarifas</span></NavLink></li>
+                        <li><NavLink class="sidebar-sub-link" href="@PromotionsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-percent"></i><span>Promociones</span></NavLink></li>
+                        <li><NavLink class="sidebar-sub-link" href="@TemplatesHref" Match="NavLinkMatch.Prefix"><i class="bi bi-chat-left-text"></i><span>Plantillas</span></NavLink></li>
+                    </ul>
+                </li>
+
+                <li class="sidebar-section-label">Gestión</li>
+                <li class="nav-item app-sidebar-group">
+                    <button type="button" class="nav-link sidebar-group-toggle @(IsGroupOpen("gestion") ? "" : "collapsed")" @onclick='() => ToggleGroup("gestion")'>
+                        <i class="bi bi-kanban"></i>
+                        <span>Gestión</span>
+                        <i class="bi bi-chevron-down ms-auto"></i>
+                    </button>
+                    <ul class="nav-content collapse @(IsGroupOpen("gestion") ? "show" : "")">
+                        <li><NavLink class="sidebar-sub-link" href="@PropertySettingsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-building"></i><span>Hospedajes</span></NavLink></li>
+                        <li><NavLink class="sidebar-sub-link" href="@UnitsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-house-door"></i><span>Unidades</span></NavLink></li>
+                        <li><NavLink class="sidebar-sub-link" href="@ChannelSyncHref" Match="NavLinkMatch.Prefix"><i class="bi bi-arrow-repeat"></i><span>Sync canales</span></NavLink></li>
+                        @if (HasModule(SaasModule.Reports))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@ReportsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-bar-chart"></i><span>Reportes</span></NavLink></li>
+                        }
+                    </ul>
+                </li>
+
+                <li class="sidebar-section-label">Cuenta</li>
+                <li class="nav-item app-sidebar-group">
+                    <button type="button" class="nav-link sidebar-group-toggle @(IsGroupOpen("cuenta") ? "" : "collapsed")" @onclick='() => ToggleGroup("cuenta")'>
+                        <i class="bi bi-person-circle"></i>
+                        <span>Cuenta</span>
+                        <i class="bi bi-chevron-down ms-auto"></i>
+                    </button>
+                    <ul class="nav-content collapse @(IsGroupOpen("cuenta") ? "show" : "")">
+                        @if (HasModule(SaasModule.Users))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@UsersHref" Match="NavLinkMatch.Prefix"><i class="bi bi-person-badge"></i><span>Usuarios</span></NavLink></li>
+                        }
+                        @if (HasModule(SaasModule.Configuration))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@AccountHref" Match="NavLinkMatch.Prefix"><i class="bi bi-gear"></i><span>Cuenta</span></NavLink></li>
+                        }
+                    </ul>
+                </li>
+            </ul>
+        </aside>
+
+        <main id="main" class="main">
+            @Body
+        </main>
+
+        <footer id="footer" class="footer app-footer">
+            <div class="copyright">
+                <strong>GestAI Booking</strong> · Plataforma operativa para hospedajes.
+            </div>
+        </footer>
+    </Authorized>
+
+    <NotAuthorized>
+        @Body
+    </NotAuthorized>
+</AuthorizeView>
+
+<div class="ui-toast-stack">
+    @foreach (var toast in _toasts)
+    {
+        <div class="ui-toast">
+            <div class="ui-toast-icon"><i class="bi bi-check2-circle"></i></div>
+            <div class="ui-toast-text">@toast</div>
+            <button type="button" class="btn-close ms-auto" @onclick="() => DismissToast(toast)"></button>
+        </div>
+    }
+</div>
+
+<LoadingOverlay Visible="@IsBusy" />
+
+@code {
+    private bool IsBusy;
+    private readonly List<string> _toasts = new();
+    private string? _openSidebarGroup = "operacion";
+    private bool _setupLoaded;
+    private bool _needsSetup;
+    private int? _defaultPropertyId;
+    private int? _defaultAccountId;
+    private string _fullName = "";
+    private string _email = "";
+    private string _initials = "?";
+    private bool _propertiesLoaded;
+    private List<PropertyListItemDto> _properties = new();
+    private CurrentUserAccessDto? _access;
+
+    private string DashboardHref => _defaultPropertyId is null ? (_propertiesLoaded && _properties.Count > 0 ? "/properties" : "/setup") : $"/dashboard/{_defaultPropertyId}";
+    private string CalendarTimelineHref => _defaultPropertyId is null ? "/properties" : $"/calendar/{_defaultPropertyId}";
+    private string BookingsListHref => _defaultPropertyId is null ? "/properties" : $"/bookings/grid/{_defaultPropertyId}";
+    private string NewBookingHref => _defaultPropertyId is null ? "/setup" : $"/bookings/new/{_defaultPropertyId}";
+    private string GuestsHref => _defaultPropertyId is null ? "/setup" : $"/guests/{_defaultPropertyId}";
+    private string UnitsHref => _defaultPropertyId is null ? "/setup" : $"/units/{_defaultPropertyId}";
+    private string AgendaHref => _defaultPropertyId is null ? "/setup" : $"/agenda/{_defaultPropertyId}";
+    private string ReportsHref => _defaultPropertyId is null ? "/setup" : $"/reports/{_defaultPropertyId}";
+    private string QuotesHref => _defaultPropertyId is null ? "/setup" : $"/quotes/{_defaultPropertyId}";
+    private string RatesHref => _defaultPropertyId is null ? "/setup" : $"/rates/{_defaultPropertyId}";
+    private string PromotionsHref => _defaultPropertyId is null ? "/setup" : $"/promotions/{_defaultPropertyId}";
+    private string SavedQuotesHref => _defaultPropertyId is null ? "/setup" : $"/quotes/{_defaultPropertyId}/saved";
+    private string HousekeepingHref => _defaultPropertyId is null ? "/setup" : $"/housekeeping/{_defaultPropertyId}";
+    private string PropertySettingsHref => "/properties";
+    private string ChannelSyncHref => _defaultPropertyId is null ? "/setup" : $"/channel-sync/{_defaultPropertyId}";
+    private string TemplatesHref => _defaultPropertyId is null ? "/setup" : $"/templates/{_defaultPropertyId}";
+    private string UsersHref => "/users";
+    private string AccountHref => "/account";
+
+    protected override void OnInitialized()
+    {
+        Api.OnBusyChanged += busy =>
+        {
+            IsBusy = busy;
+            InvokeAsync(StateHasChanged);
+        };
+
+        Api.OnToast += message =>
+        {
+            if (string.IsNullOrWhiteSpace(message))
+                return;
+
+            _toasts.Insert(0, message.Trim());
+            if (_toasts.Count > 4)
+                _toasts.RemoveAt(_toasts.Count - 1);
+
+            InvokeAsync(StateHasChanged);
+        };
+
+        Navigation.LocationChanged += (_, __) =>
+        {
+            SyncMenuFromUrl();
+            InvokeAsync(StateHasChanged);
+        };
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSetupStatus();
+        await LoadProperties();
+        await LoadAccess();
+        await LoadUserInfo();
+        SyncMenuFromUrl();
+    }
+
+    private async Task LoadAccess()
+    {
+        try
+        {
+            var res = await Api.GetAsync<AppResult<CurrentUserAccessDto>>("api/saas/me/access");
+            _access = res?.Data;
+            if (_access?.DefaultPropertyId is not null)
+                _defaultPropertyId = _access.DefaultPropertyId;
+            if (_access?.AccountId is not null)
+                _defaultAccountId = _access.AccountId;
+        }
+        catch { }
+    }
+
+    private async Task LoadUserInfo()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        var user = state.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            _fullName = user.FindFirst(ClaimTypes.Name)?.Value ?? user.FindFirst("name")?.Value ?? "";
+            _email = user.FindFirst(ClaimTypes.Email)?.Value ?? user.FindFirst("email")?.Value ?? "";
+            if (string.IsNullOrWhiteSpace(_fullName))
+                _fullName = _email;
+            _initials = GetInitials(_fullName);
+        }
+    }
+
+    private async Task LoadProperties()
+    {
+        try
+        {
+            var res = await Api.GetAsync<AppResult<List<PropertyListItemDto>>>("api/properties/mine");
+            _properties = res?.Success == true && res.Data is not null ? res.Data.Where(p => p.IsActive).ToList() : new();
+            if (_defaultPropertyId is null && _properties.Count == 1)
+                await SelectProperty(_properties[0].Id);
+        }
+        catch
+        {
+            _properties = new();
+        }
+        finally
+        {
+            _propertiesLoaded = true;
+        }
+    }
+
+    private async Task SelectProperty(int propertyId)
+    {
+        var res = await Api.PostAsync<object, AppResult>("api/users/default-property", new { propertyId });
+        if (res?.Success != true)
+        {
+            Api.Toast(res?.Message ?? "No se pudo cambiar el hospedaje activo.");
+            return;
+        }
+
+        _defaultPropertyId = propertyId;
+        Navigation.NavigateTo($"/dashboard/{propertyId}", forceLoad: false);
+        SyncMenuFromUrl();
+        StateHasChanged();
+    }
+
+    private void GoToProperties() => Navigation.NavigateTo("/properties");
+    private void GoHome() => Navigation.NavigateTo(DashboardHref);
+
+    private static string GetInitials(string name)
+    {
+        var parts = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return "?";
+        if (parts.Length == 1) return parts[0][0].ToString().ToUpperInvariant();
+        return $"{parts[0][0]}{parts[^1][0]}".ToUpperInvariant();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await Task.Delay(2000);
+        if (firstRender)
+            await JS.InvokeVoidAsync("reloadNiceAdmin");
+    }
+
+    private async Task LoadSetupStatus()
+    {
+        try
+        {
+            var res = await Api.GetAsync<AppResult<SetupStatusDto>>("api/setup/status");
+            if (res?.Success == true && res.Data is not null)
+            {
+                _defaultPropertyId = res.Data.DefaultPropertyId;
+                _defaultAccountId = res.Data.DefaultAccountId;
+                _needsSetup = !(res.Data.HasAnyAccount && res.Data.HasAnyProperty && res.Data.HasAnyUnit);
+            }
+            else
+            {
+                _needsSetup = true;
+            }
+        }
+        catch
+        {
+            _needsSetup = true;
+        }
+        finally
+        {
+            _setupLoaded = true;
+        }
+    }
+
+
+    private bool IsGroupOpen(string group) => string.Equals(_openSidebarGroup, group, StringComparison.OrdinalIgnoreCase);
+
+    private void ToggleGroup(string group)
+    {
+        _openSidebarGroup = IsGroupOpen(group) ? null : group;
+    }
+
+    private void SyncMenuFromUrl()
+    {
+        var path = new Uri(Navigation.Uri).AbsolutePath.ToLowerInvariant();
+
+        if (path.StartsWith("/calendar/") || path.StartsWith("/bookings/") || path.StartsWith("/guests/") || path.StartsWith("/agenda/") || path.StartsWith("/housekeeping/") || path.StartsWith("/dashboard/"))
+            _openSidebarGroup = "operacion";
+        else if (path.StartsWith("/quotes/") || path.StartsWith("/rates/") || path.StartsWith("/promotions/") || path.StartsWith("/templates/"))
+            _openSidebarGroup = "comercial";
+        else if (path.StartsWith("/properties") || path.StartsWith("/units/") || path.StartsWith("/reports/") || path.StartsWith("/channel-sync/"))
+            _openSidebarGroup = "gestion";
+        else if (path.StartsWith("/users") || path.StartsWith("/account"))
+            _openSidebarGroup = "cuenta";
+    }
+
+    private bool HasModule(SaasModule module) => _access?.Modules?.Any(x => x.Module == module && x.Allowed) ?? false;
+    private string RoleLabel => _access?.IsOwner == true ? "Propietario" : (_access?.Role?.ToString() switch { "Admin" => "Administrador", "Reception" => "Recepción", "Operations" => "Operaciones", _ => "Usuario" });
+
+    private async Task Logout()
+    {
+        await TokenStore.ClearAsync();
+        await Auth.SetTokenAsync(null);
+        Navigation.NavigateTo("/login", forceLoad: true);
+    }
+
+    private string CurrentPropertyLabel
+    {
+        get
+        {
+            if (!_propertiesLoaded) return "Cargando hospedaje...";
+            if (_properties.Count == 0) return "Sin hospedajes";
+            var current = _defaultPropertyId is null ? null : _properties.FirstOrDefault(x => x.Id == _defaultPropertyId.Value);
+            return current?.Name ?? "Seleccionar hospedaje";
+        }
+    }
+
+    private void DismissToast(string toast) => _toasts.Remove(toast);
+}

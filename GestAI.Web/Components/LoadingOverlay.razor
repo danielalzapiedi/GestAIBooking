@@ -1,0 +1,14 @@
+@if (Visible)
+{
+    <div class="ui-loading-overlay" role="status" aria-live="polite" aria-busy="true">
+        <div class="ui-loading-card">
+            <div class="spinner-border text-primary" role="status"></div>
+            <div class="ui-loading-title">Procesando</div>
+            <div class="ui-loading-text">Estamos actualizando la información.</div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+}

@@ -1,0 +1,236 @@
+@page "/guests/{PropertyId:int}"
+@inject ApiClient Api
+@using GestAI.Web.Dtos
+
+<div class="pagetitle">
+    <h1>Huéspedes</h1>
+</div>
+
+<div class="row g-2 align-items-end mb-3">
+    <div class="col-12 col-md-6">
+        <label class="form-label">Buscar</label>
+        <input class="form-control" value="@_search" @oninput="OnSearchInput" placeholder="Nombre / Teléfono / Email" />
+    </div>
+    <div class="col-12 col-md-6 text-md-end">
+        <button class="btn btn-primary" @onclick="NewGuest"><i class="bi bi-plus"></i> Nuevo huésped</button>
+    </div>
+</div>
+
+@if (!_loaded)
+{
+    <p>Cargando...</p>
+}
+else if (_guests is null)
+{
+    <div class="alert alert-danger">No se pudieron cargar los huéspedes.</div>
+}
+else
+{
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Listado</h5>
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Teléfono</th>
+                        <th>Email</th>
+                        <th>Documento</th>
+                        <th style="width:140px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var g in _guests)
+                    {
+                        <tr>
+                            <td>@g.FullName</td>
+                            <td>@g.Phone</td>
+                            <td>@g.Email</td>
+                            <td>@g.DocumentNumber</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-secondary me-1" @onclick="(()=>EditGuest(g))"><i class="bi bi-pencil"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="(()=>DeleteGuest(g))"><i class="bi bi-trash"></i></button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@if (_modalOpen)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(_editing?.GuestId is null ? "Nuevo huésped" : "Editar huésped")</h5>
+                    <button type="button" class="btn-close" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (!string.IsNullOrWhiteSpace(_error))
+                    {
+                        <div class="alert alert-danger">@_error</div>
+                    }
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <label class="form-label">Nombre completo</label>
+                            <input class="form-control" @bind="_editing!.FullName" />
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Teléfono</label>
+                            <input class="form-control" @bind="_editing!.Phone" />
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Email</label>
+                            <input class="form-control" @bind="_editing!.Email" />
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Tipo doc (int)</label>
+                            <input class="form-control" type="number" @bind="_editing!.DocumentType" />
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Nro doc</label>
+                            <input class="form-control" @bind="_editing!.DocumentNumber" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Notas</label>
+                            <textarea class="form-control" rows="3" @bind="_editing!.Notes"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" @onclick="CloseModal">Cancelar</button>
+                    <button class="btn btn-primary" @onclick="SaveGuest">Guardar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code{
+    [Parameter] public int PropertyId { get; set; }
+
+    private bool _loaded;
+    private string _search = "";
+    private List<GuestDto>? _guests;
+
+    private bool _modalOpen;
+    private GuestEditModel? _editing;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // auto refresh on search typing (simple debounce-free)
+        if (firstRender) return;
+    }
+
+    private async Task Load()
+    {
+        _loaded = false;
+        var res = await Api.GetAsync<AppResult<List<GuestDto>>>($"api/properties/{PropertyId}/guests?search={Uri.EscapeDataString(_search)}");
+        _guests = res?.Data;
+        _loaded = true;
+        StateHasChanged();
+    }
+
+    private void NewGuest()
+    {
+        _error = null;
+        _editing = new GuestEditModel { PropertyId = PropertyId };
+        _modalOpen = true;
+    }
+
+    private void EditGuest(GuestDto g)
+    {
+        _error = null;
+        _editing = new GuestEditModel
+        {
+            PropertyId = PropertyId,
+            GuestId = g.Id,
+            FullName = g.FullName,
+            Phone = g.Phone,
+            Email = g.Email,
+            DocumentType = g.DocumentType,
+            DocumentNumber = g.DocumentNumber,
+            Notes = g.Notes
+        };
+        _modalOpen = true;
+    }
+
+    private async Task SaveGuest()
+    {
+        _error = null;
+        if (_editing is null) return;
+
+        if (string.IsNullOrWhiteSpace(_editing.FullName))
+        {
+            _error = "El nombre es obligatorio.";
+            return;
+        }
+
+        var cmd = new UpsertGuestCommand(_editing.PropertyId, _editing.GuestId, _editing.FullName ?? "", _editing.Phone, _editing.Email, _editing.DocumentType, _editing.DocumentNumber, _editing.Notes);
+        var res = await Api.PostJsonAsync<AppResult<int>, UpsertGuestCommand>($"api/properties/{PropertyId}/guests", cmd);
+        if (res?.Success != true)
+        {
+            _error = res?.Message ?? "No se pudo guardar.";
+            return;
+        }
+
+        _modalOpen = false;
+        await Load();
+    }
+
+    private async Task DeleteGuest(GuestDto g)
+    {
+        var res = await Api.DeleteAsync<AppResult>($"api/properties/{PropertyId}/guests/{g.Id}");
+        await Load();
+    }
+
+    private void CloseModal()
+    {
+        _modalOpen = false;
+        _editing = null;
+        _error = null;
+    }
+
+
+    private sealed class GuestEditModel
+    {
+        public int PropertyId { get; set; }
+        public int? GuestId { get; set; }
+        public string FullName { get; set; } = "";
+        public string? Phone { get; set; }
+        public string? Email { get; set; }
+        public int? DocumentType { get; set; }
+        public string? DocumentNumber { get; set; }
+        public string? Notes { get; set; }
+    }
+
+    // naive search refresh
+    private string Search
+    {
+        get => _search;
+        set
+        {
+            if (_search != value)
+            {
+                _search = value;
+                _ = Load();
+            }
+        }
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        _search = e.Value?.ToString() ?? "";
+        await Load();
+    }
+
+}

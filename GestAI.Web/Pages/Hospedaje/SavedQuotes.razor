@@ -1,0 +1,132 @@
+@page "/quotes/{PropertyId:int}/saved"
+@using GestAI.Web.Dtos
+@inject ApiClient Api
+@inject NavigationManager Nav
+
+<PageTitle>Cotizaciones guardadas</PageTitle>
+
+<div class="pagetitle d-flex justify-content-between align-items-center">
+    <div>
+        <h1>Cotizaciones guardadas</h1>
+        <p class="text-muted mb-0">Reutilizá propuestas y convertí cotizaciones en reservas.</p>
+    </div>
+    <button class="btn btn-outline-secondary" @onclick='() => Nav.NavigateTo($"/quotes/{PropertyId}")'>Volver al cotizador</button>
+</div>
+
+<div class="card mb-3"><div class="card-body pt-3"><div class="row g-2">
+    <div class="col-md-6"><input class="form-control" placeholder="Buscar por huésped, email o token" @bind="_search" /></div>
+    <div class="col-md-3"><select class="form-select" @bind="_status"><option value="">Todos los estados</option>@foreach (var st in Enum.GetValues<SavedQuoteStatus>()){<option value="@st">@st</option>}</select></div>
+    <div class="col-md-3"><button class="btn btn-primary w-100" @onclick="Load">Buscar</button></div>
+</div></div></div>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert @(_success ? "alert-success" : "alert-danger")">@_message</div>
+}
+
+<div class="card"><div class="card-body pt-3">
+@if (!_loaded)
+{
+    <EmptyState Title="Cargando información" Description="Estamos trayendo los datos de esta pantalla." Icon="bi-hourglass-split" />
+}
+else if (!_items.Any())
+{
+    <EmptyState Title="No hay cotizaciones guardadas" Description="Guardá una cotización desde el cotizador para reutilizarla después." Icon="bi-journal-text" />
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead><tr><th>Creada</th><th>Huésped</th><th>Unidad</th><th>Estadía</th><th>Total</th><th>Estado</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var item in _items)
+            {
+                <tr>
+                    <td>@item.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                    <td><strong>@(item.GuestName ?? "Sin nombre")</strong><div class="small text-muted">@(item.GuestEmail ?? item.PublicToken)</div></td>
+                    <td>@(item.UnitName ?? "Sin unidad")</td>
+                    <td>@item.CheckInDate.ToString("dd/MM") - @item.CheckOutDate.ToString("dd/MM")<div class="small text-muted">@item.Adults adult. · @item.Children niños</div></td>
+                    <td><strong>@item.TotalAmount.ToString("0.00")</strong><div class="small text-success">Seña @item.SuggestedDepositAmount.ToString("0.00")</div></td>
+                    <td><StatusBadge Text="@item.Status.ToString()" CssClass="@(item.Status == SavedQuoteStatus.Converted ? "ui-badge ui-badge-success" : "ui-badge ui-badge-neutral")" /></td>
+                    <td class="text-end">
+                        <button class="btn btn-sm btn-outline-primary me-1" @onclick="(() => Select(item))">Ver</button>
+                        @if (item.Status != SavedQuoteStatus.Converted)
+                        {
+                            <button class="btn btn-sm btn-primary" @onclick="(() => Convert(item))">Convertir</button>
+                        }
+                        else if (item.CreatedBookingId.HasValue)
+                        {
+                            <button class="btn btn-sm btn-outline-success" @onclick='() => Nav.NavigateTo($"/bookings/{PropertyId}/{item.CreatedBookingId.Value}")'>Ir a reserva</button>
+                        }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}
+</div></div>
+
+@if (_selected is not null)
+{
+    <div class="card mt-3"><div class="card-body">
+        <h5 class="card-title">Detalle de cotización</h5>
+        <div class="row g-3">
+            <div class="col-md-3"><div class="small text-muted">Unidad</div><div class="fw-bold">@(_selected.UnitName ?? "-")</div></div>
+            <div class="col-md-3"><div class="small text-muted">Tarifa base</div><div class="fw-bold">@_selected.BaseAmount.ToString("0.00")</div></div>
+            <div class="col-md-3"><div class="small text-muted">Promociones</div><div class="fw-bold text-success">- @_selected.PromotionsAmount.ToString("0.00")</div></div>
+            <div class="col-md-3"><div class="small text-muted">Total</div><div class="fw-bold">@_selected.TotalAmount.ToString("0.00")</div></div>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(_selected.AppliedPromotionNames))
+        {
+            <div class="mt-3"><StatusBadge Text="@_selected.AppliedPromotionNames" CssClass="ui-badge ui-badge-success" /></div>
+        }
+        @if (!string.IsNullOrWhiteSpace(_selected.Summary))
+        {
+            <div class="mt-3 alert alert-info mb-0">@_selected.Summary</div>
+        }
+    </div></div>
+}
+
+@code {
+    [Parameter] public int PropertyId { get; set; }
+    private List<SavedQuoteDto> _items = new();
+    private SavedQuoteDto? _selected;
+    private string? _search;
+    private SavedQuoteStatus? _status;
+    private bool _loaded;
+    private string? _message;
+    private bool _success;
+
+    protected override async Task OnParametersSetAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loaded = false;
+        var url = $"api/properties/{PropertyId}/quotes/saved";
+        var qs = new List<string>();
+        if (!string.IsNullOrWhiteSpace(_search)) qs.Add($"search={Uri.EscapeDataString(_search)}");
+        if (_status.HasValue) qs.Add($"status={_status.Value}");
+        if (qs.Any()) url += "?" + string.Join("&", qs);
+        _items = (await Api.GetAsync<AppResult<List<SavedQuoteDto>>>(url))?.Data ?? new();
+        _loaded = true;
+    }
+
+    private async Task Select(SavedQuoteDto item)
+    {
+        _selected = (await Api.GetAsync<AppResult<SavedQuoteDto>>($"api/properties/{PropertyId}/quotes/saved/{item.Id}"))?.Data ?? item;
+    }
+
+    private async Task Convert(SavedQuoteDto item)
+    {
+        var guestIdText = await JS.InvokeAsync<string>("prompt", "Ingresá el GuestId para convertir la cotización", "0");
+        if (!int.TryParse(guestIdText, out var guestId) || guestId <= 0)
+            return;
+        var res = await Api.PostAsync<ConvertSavedQuoteToBookingCommand, AppResult<int>>($"api/properties/{PropertyId}/quotes/saved/{item.Id}/convert", new ConvertSavedQuoteToBookingCommand(PropertyId, item.Id, guestId, BookingStatus.Tentative, "Creada desde cotización guardada"));
+        _success = res?.Success == true;
+        _message = _success ? "Cotización convertida correctamente." : (res?.Message ?? "No se pudo convertir la cotización.");
+        await Load();
+    }
+
+    [Inject] public IJSRuntime JS { get; set; } = default!;
+}

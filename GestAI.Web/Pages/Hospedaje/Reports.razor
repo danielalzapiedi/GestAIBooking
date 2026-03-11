@@ -1,0 +1,193 @@
+@page "/reports/{PropertyId:int}"
+@inject ApiClient Api
+@using GestAI.Web.Dtos
+
+<div class="pagetitle">
+    <h1>Reportes</h1>
+    <p class="text-muted mb-0">Indicadores comerciales y operativos para analizar desempeño, ocupación y cobros.</p>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-12 col-md-3">
+                <label class="form-label">Desde</label>
+                <input class="form-control" type="date" value="@_fromStr" @onchange="OnFromChanged" />
+            </div>
+            <div class="col-12 col-md-3">
+                <label class="form-label">Hasta</label>
+                <input class="form-control" type="date" value="@_toStr" @onchange="OnToChanged" />
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label">Año</label>
+                <input class="form-control" type="number" @bind="_year" />
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label">Mes</label>
+                <input class="form-control" type="number" min="1" max="12" @bind="_month" />
+            </div>
+            <div class="col-12 col-md-2 text-md-end">
+                <button class="btn btn-outline-primary w-100" @onclick="Load"><i class="bi bi-arrow-repeat"></i> Actualizar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (!_loaded)
+{
+    <EmptyState Title="Cargando reportes" Description="Estamos calculando ingresos, ocupación y métricas por unidad." Icon="bi-bar-chart" />
+}
+else if (_reports is null)
+{
+    <EmptyState Title="No se pudieron cargar los reportes" Description="Reintentá con otro período o actualizá la pantalla." Icon="bi-exclamation-triangle" />
+}
+else
+{
+    <div class="row g-3 mb-1">
+        <div class="col-12 col-md-6 col-xl-3"><div class="card kpi-card"><div class="card-body"><div class="kpi-label">Ocupación</div><div class="kpi-value">@FormatPercent(_reports.Occupancy.OccupancyPercent)</div><div class="kpi-help">@_reports.Occupancy.NightsOccupied noches ocupadas de @_reports.Occupancy.TotalNightsAvailable disponibles.</div></div></div></div>
+        <div class="col-12 col-md-6 col-xl-3"><div class="card kpi-card"><div class="card-body"><div class="kpi-label">Ingresos cobrados</div><div class="kpi-value">@FormatMoney(_reports.Income.PaidIncome)</div><div class="kpi-help">Cobrado en @(_reports.Income.Month)/@(_reports.Income.Year).</div></div></div></div>
+        <div class="col-12 col-md-6 col-xl-3"><div class="card kpi-card"><div class="card-body"><div class="kpi-label">Estadía promedio</div><div class="kpi-value">@_reports.Occupancy.AverageStayNights.ToString("0.##")</div><div class="kpi-help">Promedio de noches por reserva del período.</div></div></div></div>
+        <div class="col-12 col-md-6 col-xl-3"><div class="card kpi-card"><div class="card-body"><div class="kpi-label">Ingreso promedio por noche</div><div class="kpi-value">@FormatMoney(_reports.Income.AverageIncomePerNight)</div><div class="kpi-help">Promedio cobrado por noche ocupada.</div></div></div></div>
+    </div>
+
+    <div class="row g-3 mb-1">
+        <div class="col-12 col-xl-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Señas</h5>
+                    <div class="summary-pill-grid">
+                        <div class="summary-pill"><div class="label">Cobradas</div><div class="value">@FormatMoney(_reports.Income.DepositsCollected)</div></div>
+                        <div class="summary-pill"><div class="label">Pendientes</div><div class="value">@FormatMoney(_reports.Income.DepositsPending)</div></div>
+                        <div class="summary-pill"><div class="label">Reservas analizadas</div><div class="value">@_reports.TotalBookings</div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-xl-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Reservas por estado</h5>
+                    @if (_reports.BookingsByStatus.Count == 0)
+                    {
+                        <EmptyState Title="Sin reservas para el período" Description="No hay reservas que coincidan con los filtros seleccionados." Icon="bi-inbox" />
+                    }
+                    else
+                    {
+                        <div class="report-bars mt-3">
+                            @foreach (var item in _reports.BookingsByStatus)
+                            {
+                                <div class="report-bar-item">
+                                    <div class="fw-semibold">@TranslateStatus(item.Label)</div>
+                                    <div class="report-bar-track"><div class="report-bar-fill" style="width:@PercentWidth(item.Count, MaxStatusCount)%"></div></div>
+                                    <div class="text-end fw-semibold">@item.Count</div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                <h5 class="card-title mb-0">Ocupación e ingresos por unidad</h5>
+                <span class="text-muted small">Período @(_reports.Occupancy.From.ToString("dd/MM/yyyy")) al @(_reports.Occupancy.ToExclusive.AddDays(-1).ToString("dd/MM/yyyy"))</span>
+            </div>
+
+            @if (_reports.UnitOccupancy.Count == 0)
+            {
+                <EmptyState Title="No hay unidades activas" Description="Creá unidades para empezar a ver métricas comparativas." Icon="bi-house-door" />
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table align-middle">
+                        <thead>
+                            <tr>
+                                <th>Unidad</th>
+                                <th>Noches ocupadas</th>
+                                <th>Disponibles</th>
+                                <th>Ocupación</th>
+                                <th class="text-end">Ingresos</th>
+                                <th class="text-end">Promedio / noche</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var unit in _reports.UnitOccupancy)
+                        {
+                            <tr>
+                                <td><strong>@unit.UnitName</strong></td>
+                                <td>@unit.NightsOccupied</td>
+                                <td>@unit.NightsAvailable</td>
+                                <td><span class="ui-badge ui-badge-info">@FormatPercent(unit.OccupancyPercent)</span></td>
+                                <td class="text-end">@FormatMoney(unit.Income)</td>
+                                <td class="text-end">@FormatMoney(unit.AverageIncomePerNight)</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int PropertyId { get; set; }
+
+    private bool _loaded;
+    private ReportsDto? _reports;
+    private DateOnly _from = DateOnly.FromDateTime(DateTime.Today.AddDays(-30));
+    private DateOnly _to = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+    private int _year = DateTime.Today.Year;
+    private int _month = DateTime.Today.Month;
+
+    private int MaxStatusCount => _reports?.BookingsByStatus.Count > 0 ? _reports.BookingsByStatus.Max(x => x.Count) : 0;
+
+    private string _fromStr
+    {
+        get => _from.ToString("yyyy-MM-dd");
+        set { if (DateOnly.TryParse(value, out var d)) _from = d; }
+    }
+
+    private string _toStr
+    {
+        get => _to.ToString("yyyy-MM-dd");
+        set { if (DateOnly.TryParse(value, out var d)) _to = d; }
+    }
+
+    protected override async Task OnParametersSetAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loaded = false;
+        _reports = (await Api.GetAsync<AppResult<ReportsDto>>($"api/properties/{PropertyId}/reports?from={_from:yyyy-MM-dd}&to={_to:yyyy-MM-dd}&year={_year}&month={_month}"))?.Data;
+        _loaded = true;
+    }
+
+    private void OnFromChanged(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), out var d)) _from = d;
+    }
+
+    private void OnToChanged(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), out var d)) _to = d;
+    }
+
+    private static string FormatMoney(decimal value) => value.ToString("0.00");
+    private static string FormatPercent(decimal value) => $"{value:0.##}%";
+    private static decimal PercentWidth(int value, int max) => max <= 0 ? 8m : Math.Max(8m, Math.Min(100m, decimal.Round(value * 100m / max, 2)));
+
+    private static string TranslateStatus(string status) => status?.Trim().ToLowerInvariant() switch
+    {
+        "tentative" => "Tentativa",
+        "confirmed" => "Confirmada",
+        "checkedin" => "Check-in",
+        "checkedout" => "Check-out",
+        "cancelled" => "Cancelada",
+        _ => status
+    };
+}

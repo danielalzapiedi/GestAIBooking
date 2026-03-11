@@ -1,0 +1,116 @@
+@page "/properties/new"
+@page "/properties/{PropertyId:int}/edit"
+@page "/property-settings/{PropertyId:int}"
+@using GestAI.Web.Dtos
+@inject ApiClient Api
+@inject NavigationManager Nav
+
+<PageTitle>@(IsNew ? "Nuevo hospedaje" : "Editar hospedaje")</PageTitle>
+
+<div class="pagetitle d-flex justify-content-between align-items-center">
+    <div>
+        <h1>@(IsNew ? "Nuevo hospedaje" : "Editar hospedaje")</h1>
+        <p class="text-muted mb-0">Completá la información operativa y comercial del hospedaje.</p>
+    </div>
+    <button class="btn btn-light border" @onclick='() => Nav.NavigateTo("/properties")'>Volver</button>
+</div>
+
+@if (!_loaded)
+{
+    <EmptyState Title="Cargando hospedaje" Description="Estamos preparando el formulario con la configuración actual." Icon="bi-building" />
+}
+else
+{
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="alert @(_success ? "alert-success" : "alert-danger")">@_message</div>
+    }
+
+    <EditForm Model="_model" OnValidSubmit="Save">
+        <DataAnnotationsValidator />
+        <div class="row g-3">
+            <div class="col-12">
+                <div class="card"><div class="card-body pt-3"><div class="row g-3">
+                    <div class="col-md-6"><label class="form-label">Nombre</label><input class="form-control" @bind="_model.Name" /></div>
+                    <div class="col-md-6"><label class="form-label">Nombre comercial</label><input class="form-control" @bind="_model.CommercialName" /></div>
+                    <div class="col-md-3"><label class="form-label">Activo</label><select class="form-select" @bind="_model.IsActive"><option value="true">Sí</option><option value="false">No</option></select></div>
+                    <div class="col-md-3"><label class="form-label">Moneda</label><input class="form-control" @bind="_model.Currency" /></div>
+                    <div class="col-md-3"><label class="form-label">Check-in</label><input class="form-control" type="time" @bind="_model.DefaultCheckInTime" /></div>
+                    <div class="col-md-3"><label class="form-label">Check-out</label><input class="form-control" type="time" @bind="_model.DefaultCheckOutTime" /></div>
+                    <div class="col-md-4"><label class="form-label">Teléfono</label><input class="form-control" @bind="_model.Phone" /></div>
+                    <div class="col-md-4"><label class="form-label">Email</label><input class="form-control" @bind="_model.Email" /></div>
+                    <div class="col-md-4"><label class="form-label">% seña</label><input class="form-control" type="number" step="0.01" @bind="_model.DefaultDepositPercentage" /></div>
+                    <div class="col-md-4"><label class="form-label">Ciudad</label><input class="form-control" @bind="_model.City" /></div>
+                    <div class="col-md-4"><label class="form-label">Provincia</label><input class="form-control" @bind="_model.Province" /></div>
+                    <div class="col-md-4"><label class="form-label">País</label><input class="form-control" @bind="_model.Country" /></div>
+                    <div class="col-12"><label class="form-label">Dirección</label><input class="form-control" @bind="_model.Address" /></div>
+                    <div class="col-md-4"><label class="form-label">Slug público</label><input class="form-control" @bind="_model.PublicSlug" /></div>
+                    <div class="col-md-4"><label class="form-label">Contacto comercial</label><input class="form-control" @bind="_model.CommercialContactName" /></div>
+                    <div class="col-md-4"><label class="form-label">Teléfono comercial</label><input class="form-control" @bind="_model.CommercialContactPhone" /></div>
+                    <div class="col-12"><label class="form-label">Email comercial</label><input class="form-control" @bind="_model.CommercialContactEmail" /></div>
+                </div></div></div>
+            </div>
+
+            <div class="col-md-6"><div class="card"><div class="card-body pt-3"><label class="form-label">Política de seña</label><textarea class="form-control" rows="4" @bind="_model.DepositPolicy"></textarea></div></div></div>
+            <div class="col-md-6"><div class="card"><div class="card-body pt-3"><label class="form-label">Política de cancelación</label><textarea class="form-control" rows="4" @bind="_model.CancellationPolicy"></textarea></div></div></div>
+            <div class="col-md-6"><div class="card"><div class="card-body pt-3"><label class="form-label">Instrucciones de check-in</label><textarea class="form-control" rows="4" @bind="_model.CheckInInstructions"></textarea></div></div></div>
+            <div class="col-md-6"><div class="card"><div class="card-body pt-3"><label class="form-label">Reglas del hospedaje</label><textarea class="form-control" rows="4" @bind="_model.PropertyRules"></textarea></div></div></div>
+            <div class="col-md-6"><div class="card"><div class="card-body pt-3"><label class="form-label">Términos y condiciones</label><textarea class="form-control" rows="4" @bind="_model.TermsAndConditions"></textarea></div></div></div>
+            <div class="col-md-6"><div class="card"><div class="card-body pt-3"><label class="form-label">Descripción pública</label><textarea class="form-control" rows="4" @bind="_model.PublicDescription"></textarea></div></div></div>
+
+            <div class="col-12 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary" @onclick='() => Nav.NavigateTo("/properties")'>Cancelar</button>
+                <button type="submit" class="btn btn-primary" disabled="@_saving">@(_saving ? "Guardando..." : "Guardar")</button>
+            </div>
+        </div>
+    </EditForm>
+}
+
+@code {
+    [Parameter] public int? PropertyId { get; set; }
+    private PropertyDetailDto _model = new();
+    private bool _loaded;
+    private string? _message;
+    private bool _saving;
+    private bool _success;
+    private bool IsNew => !PropertyId.HasValue || PropertyId <= 0;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _message = null;
+        if (IsNew)
+        {
+            _model = new PropertyDetailDto { IsActive = true, Currency = "ARS" };
+            _loaded = true;
+            return;
+        }
+
+        var res = await Api.GetAsync<AppResult<PropertyDetailDto>>($"api/properties/{PropertyId}");
+        _model = res?.Data ?? new PropertyDetailDto();
+        _loaded = true;
+    }
+
+    private async Task Save()
+    {
+        _message = null;
+        _saving = true;
+        var cmd = new UpsertPropertyCommand(PropertyId, _model.Name, _model.CommercialName, _model.Type, _model.IsActive, _model.Phone, _model.Email, _model.City, _model.Province, _model.Country, _model.Address, _model.DefaultCheckInTime, _model.DefaultCheckOutTime, _model.Currency, _model.DepositPolicy, _model.DefaultDepositPercentage, _model.CancellationPolicy, _model.TermsAndConditions, _model.CheckInInstructions, _model.PropertyRules, _model.CommercialContactName, _model.CommercialContactPhone, _model.CommercialContactEmail, _model.PublicSlug, _model.PublicDescription);
+        try
+        {
+            AppResult<int>? res;
+            if (IsNew)
+                res = await Api.PostAsync<UpsertPropertyCommand, AppResult<int>>("api/properties", cmd);
+            else
+                res = await Api.PutAsync<UpsertPropertyCommand, AppResult<int>>($"api/properties/{PropertyId}", cmd);
+
+            _success = res?.Success == true;
+            _message = _success ? "Hospedaje guardado correctamente." : (res?.Message ?? "No se pudo guardar el hospedaje.");
+            if (_success && res?.Data is int id)
+                Nav.NavigateTo($"/properties/{id}/edit", false);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

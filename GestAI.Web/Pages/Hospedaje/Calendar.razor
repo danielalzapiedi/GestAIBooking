@@ -1,0 +1,417 @@
+@page "/calendar/{PropertyId:int}"
+@inject ApiClient Api
+@inject NavigationManager Nav
+@using GestAI.Web.Dtos
+
+<PageTitle>Calendario</PageTitle>
+
+<div class="pagetitle d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+        <h1>Calendario operativo</h1>
+        <p class="text-muted mb-0">Visualizá la ocupación por unidad con una lectura rápida de entradas, salidas y bloqueos.</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <button class="btn btn-outline-secondary" @onclick="PreviousRangeAsync"><i class="bi bi-chevron-left"></i> Anterior</button>
+        <button class="btn btn-outline-secondary" @onclick="GoTodayAsync">Hoy</button>
+        <button class="btn btn-outline-secondary" @onclick="NextRangeAsync">Siguiente <i class="bi bi-chevron-right"></i></button>
+    </div>
+</div>
+
+<div class="calendar-shell">
+    <div class="calendar-filters">
+        <div class="row g-3 align-items-end">
+            <div class="col-12 col-md-3 col-xl-2">
+                <label class="form-label">Desde</label>
+                <input class="form-control" type="date" value="@_fromStr" @onchange="OnFromChanged" />
+            </div>
+            <div class="col-6 col-md-2 col-xl-1">
+                <label class="form-label">Días</label>
+                <input class="form-control" type="number" min="7" max="62" @bind="_days" />
+            </div>
+            <div class="col-6 col-md-3 col-xl-2">
+                <label class="form-label">Unidad</label>
+                <select class="form-select" @bind="_selectedUnitId">
+                    <option value="0">Todas</option>
+                    @foreach (var u in _units)
+                    {
+                        <option value="@u.Id">@u.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-12 col-md-4 col-xl-3">
+                <label class="form-label">Estado de reserva</label>
+                <select class="form-select" @bind="_statusFilter">
+                    <option value="">Todos</option>
+                    @foreach (var s in Enum.GetValues<BookingStatus>())
+                    {
+                        <option value="@s">@StatusLabel(s)</option>
+                    }
+                </select>
+            </div>
+            <div class="col-12 col-xl-4">
+                <div class="d-flex flex-wrap gap-2 justify-content-xl-end">
+                    <button class="btn btn-outline-primary" @onclick="Load"><i class="bi bi-arrow-repeat"></i> Actualizar</button>
+                    <button class="btn btn-primary" @onclick="NewBooking"><i class="bi bi-plus-circle"></i> Nueva reserva</button>
+                    <button class="btn btn-outline-dark" @onclick="OpenBlockModal"><i class="bi bi-lock"></i> Bloquear fechas</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="calendar-toolbar">
+                <div>
+                    <div class="calendar-title">@RangeTitle</div>
+                    <div class="calendar-subtitle">Vista continua por unidad. El check-in ocupa 3/4 del día y el check-out 1/4 para facilitar la lectura.</div>
+                </div>
+                <div class="small text-muted">@FilteredUnits().Count() unidad(es) visibles · @_days día(s)</div>
+            </div>
+
+            @if (!_loaded)
+            {
+                <EmptyState Title="Cargando calendario" Description="Estamos consultando reservas, bloqueos y disponibilidad." Icon="bi-calendar-week" />
+            }
+            else if (_units.Count == 0)
+            {
+                <EmptyState Title="Todavía no hay unidades" Description="Creá al menos una unidad para visualizar la ocupación en el calendario." Icon="bi-house-door">
+                    <button class="btn btn-primary" @onclick="GoToUnits">Ir a unidades</button>
+                </EmptyState>
+            }
+            else if (!FilteredUnits().Any())
+            {
+                <EmptyState Title="No hay resultados con los filtros actuales" Description="Probá cambiar la unidad o el estado para ampliar la vista." Icon="bi-funnel" />
+            }
+            else
+            {
+                <div class="calendar-timeline-modern">
+                    <div class="resources">
+                        <div class="resources-header">Unidades</div>
+                        @foreach (var unit in FilteredUnits())
+                        {
+                            <div class="resource-row">
+                                <div class="resource-name">@unit.Name</div>
+                                <div class="resource-meta">@OperationalLabel(unit.OperationalStatus) · @ActiveLabel(unit.IsActive)</div>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="grid">
+                        <div class="grid-header">
+                            @foreach (var day in _rangeDays)
+                            {
+                                <div class="day-cell @(IsToday(day) ? "today" : null) @(IsWeekend(day) ? "weekend" : null)">
+                                    <div class="dow">@ShortDay(day)</div>
+                                    <div class="dom">@day.Day</div>
+                                </div>
+                            }
+                        </div>
+
+                        <div class="grid-body">
+                            @foreach (var unit in FilteredUnits())
+                            {
+                                <div class="grid-row">
+                                    @foreach (var day in _rangeDays)
+                                    {
+                                        <div class="cell @(IsToday(day) ? "today" : null) @(IsWeekend(day) ? "weekend" : null)"></div>
+                                    }
+
+                                    @foreach (var bar in GetBars(unit.Id))
+                                    {
+                                        <button type="button"
+                                                class="range-bar @bar.CssClass"
+                                                style="@bar.Style"
+                                                title="@bar.Tooltip"
+                                                @onclick="() => HandleBarClick(bar, unit.Id)">
+                                            <span class="range-title">@bar.Title</span>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="calendar-legend">
+                    <div class="legend-item"><span class="legend-dot legend-tentative"></span> Tentativa</div>
+                    <div class="legend-item"><span class="legend-dot legend-confirmed"></span> Confirmada</div>
+                    <div class="legend-item"><span class="legend-dot legend-checkedin"></span> Check-in / ocupada</div>
+                    <div class="legend-item"><span class="legend-dot legend-checkedout"></span> Check-out / finalizada</div>
+                    <div class="legend-item"><span class="legend-dot legend-blocked"></span> Bloqueo</div>
+                    <div class="legend-item"><span class="legend-dot legend-external-booking"></span> Booking externo</div>
+                    <div class="legend-item"><span class="legend-dot legend-external-airbnb"></span> Airbnb externo</div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@if (_blockModalOpen)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Bloquear fechas</h5>
+                    <button type="button" class="btn-close" @onclick="CloseBlockModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Unidad</label>
+                            <select class="form-select" @bind="_blockUnitId">
+                                <option value="0">-- Seleccionar --</option>
+                                @foreach (var u in _units)
+                                {
+                                    <option value="@u.Id">@u.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label">Desde</label>
+                            <input class="form-control" type="date" value="@_blockFromStr" @onchange="OnBlockFromChanged" />
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label">Hasta</label>
+                            <input class="form-control" type="date" value="@_blockToStr" @onchange="OnBlockToChanged" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Motivo</label>
+                            <input class="form-control" @bind="_blockReason" placeholder="Ej. mantenimiento, limpieza profunda, reparación" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" @onclick="CloseBlockModal">Cancelar</button>
+                    <button class="btn btn-primary" @onclick="SaveBlocked">Guardar bloqueo</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int PropertyId { get; set; }
+
+    private const decimal DayWidth = 64m;
+    private bool _loaded;
+    private List<UnitListItemDto> _units = new();
+    private List<CalendarBookingDto> _bookings = new();
+    private List<BlockedDateDto> _blocked = new();
+    private List<ExternalCalendarEventDto> _externalEvents = new();
+    private DateOnly _from = DateOnly.FromDateTime(DateTime.Today);
+    private int _days = 21;
+    private int _selectedUnitId;
+    private string? _statusFilter;
+    private List<DateOnly> _rangeDays = new();
+    private string _fromStr => _from.ToString("yyyy-MM-dd");
+    private DateOnly _toExclusive => _from.AddDays(_days);
+    private string RangeTitle => $"{_from:dd MMM yyyy} - {_toExclusive.AddDays(-1):dd MMM yyyy}";
+
+    protected override async Task OnParametersSetAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loaded = false;
+        _units = (await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units"))?.Data ?? new();
+        _bookings = (await Api.GetAsync<AppResult<List<CalendarBookingDto>>>($"api/properties/{PropertyId}/bookings/range?from={_from:yyyy-MM-dd}&to={_toExclusive:yyyy-MM-dd}"))?.Data ?? new();
+        _blocked = (await Api.GetAsync<AppResult<List<BlockedDateDto>>>($"api/properties/{PropertyId}/blockedDates/range?from={_from:yyyy-MM-dd}&to={_toExclusive:yyyy-MM-dd}"))?.Data ?? new();
+        _externalEvents = (await Api.GetAsync<AppResult<List<ExternalCalendarEventDto>>>($"api/properties/{PropertyId}/external-calendars/events?from={_from:yyyy-MM-dd}&to={_toExclusive:yyyy-MM-dd}"))?.Data ?? new();
+        _rangeDays = Enumerable.Range(0, _days).Select(i => _from.AddDays(i)).ToList();
+        _loaded = true;
+    }
+
+    private IEnumerable<UnitListItemDto> FilteredUnits() => _selectedUnitId > 0 ? _units.Where(x => x.Id == _selectedUnitId) : _units;
+    private IEnumerable<CalendarBookingDto> FilteredBookings() => string.IsNullOrWhiteSpace(_statusFilter) ? _bookings : _bookings.Where(x => x.Status.ToString() == _statusFilter);
+    private void NewBooking() => Nav.NavigateTo($"/bookings/new/{PropertyId}");
+    private void GoToUnits() => Nav.NavigateTo($"/units/{PropertyId}");
+    private void OpenBooking(int bookingId) => Nav.NavigateTo($"/bookings/{PropertyId}/{bookingId}");
+    private async Task PreviousRangeAsync() { _from = _from.AddDays(-_days); await Load(); }
+    private async Task NextRangeAsync() { _from = _from.AddDays(_days); await Load(); }
+    private async Task GoTodayAsync() { _from = DateOnly.FromDateTime(DateTime.Today); await Load(); }
+    private static bool IsWeekend(DateOnly day) => day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+    private static bool IsToday(DateOnly day) => day == DateOnly.FromDateTime(DateTime.Today);
+    private static string ShortDay(DateOnly day) => day.DayOfWeek switch { DayOfWeek.Monday => "Lun", DayOfWeek.Tuesday => "Mar", DayOfWeek.Wednesday => "Mié", DayOfWeek.Thursday => "Jue", DayOfWeek.Friday => "Vie", DayOfWeek.Saturday => "Sáb", _ => "Dom" };
+    private static string ActiveLabel(bool isActive) => isActive ? "Activa" : "Inactiva";
+    private static string OperationalLabel(UnitOperationalStatus status) => status switch { UnitOperationalStatus.Available => "Disponible", UnitOperationalStatus.Occupied => "Ocupada", UnitOperationalStatus.PendingCleaning => "Pend. limpieza", UnitOperationalStatus.Cleaning => "Limpieza", UnitOperationalStatus.Clean => "Lista", UnitOperationalStatus.Maintenance => "Mantenimiento", _ => status.ToString() };
+    private static string StatusLabel(BookingStatus status) => status switch { BookingStatus.Inquiry => "Consulta", BookingStatus.Tentative => "Tentativa", BookingStatus.Confirmed => "Confirmada", BookingStatus.CheckedIn => "Check-in", BookingStatus.CheckedOut => "Check-out", BookingStatus.Cancelled => "Cancelada", _ => status.ToString() };
+
+    private IEnumerable<RangeBar> GetBars(int unitId)
+    {
+        foreach (var booking in FilteredBookings().Where(x => x.UnitId == unitId).OrderBy(x => x.CheckInDate))
+        {
+            var bar = BuildBookingBar(booking);
+            if (bar is not null)
+                yield return bar;
+        }
+
+        foreach (var blocked in _blocked.Where(x => x.UnitId == unitId).OrderBy(x => x.DateFrom))
+        {
+            var bar = BuildBlockedBar(blocked);
+            if (bar is not null)
+                yield return bar;
+        }
+
+        foreach (var externalEvent in _externalEvents.Where(x => x.UnitId == unitId).OrderBy(x => x.StartDate))
+        {
+            var bar = BuildExternalBar(externalEvent);
+            if (bar is not null)
+                yield return bar;
+        }
+    }
+
+    private RangeBar? BuildBookingBar(CalendarBookingDto booking)
+    {
+        var start = booking.CheckInDate < _from ? _from : booking.CheckInDate;
+        var endExclusive = booking.CheckOutDate > _toExclusive ? _toExclusive : booking.CheckOutDate;
+        if (endExclusive <= _from || start >= _toExclusive || endExclusive <= start)
+            return null;
+
+        var left = (_rangeDays.IndexOf(start) * DayWidth) + (booking.CheckInDate >= _from ? DayWidth * 0.25m : 4m);
+        var width = (((decimal)(endExclusive.DayNumber - start.DayNumber)) * DayWidth)
+            - (booking.CheckInDate >= _from ? DayWidth * 0.25m : 4m)
+            - (booking.CheckOutDate <= _toExclusive ? DayWidth * 0.75m : 4m);
+
+        if (width < 18m)
+            width = 18m;
+
+        return new RangeBar
+        {
+            Kind = "booking",
+            BookingId = booking.Id,
+            Title = $"{booking.GuestName} · {booking.BookingCode}",
+            Tooltip = $"{booking.GuestName} | {booking.CheckInDate:dd/MM} - {booking.CheckOutDate:dd/MM} | Total {booking.TotalAmount:0.00} | Saldo {booking.PendingAmount:0.00} | Estado {StatusLabel(booking.Status)}",
+            CssClass = BookingCssClass(booking.Status),
+            Style = $"left:{left}px;width:{width}px;",
+        };
+    }
+
+
+    private RangeBar? BuildExternalBar(ExternalCalendarEventDto externalEvent)
+    {
+        var start = externalEvent.StartDate < _from ? _from : externalEvent.StartDate;
+        var endExclusive = externalEvent.EndDate > _toExclusive ? _toExclusive : externalEvent.EndDate;
+        if (endExclusive <= _from || start >= _toExclusive || endExclusive <= start)
+            return null;
+
+        var left = (_rangeDays.IndexOf(start) * DayWidth) + 6m;
+        var width = (((decimal)(endExclusive.DayNumber - start.DayNumber)) * DayWidth) - 12m;
+        if (width < 18m)
+            width = 18m;
+
+        var label = externalEvent.SourceChannel switch
+        {
+            ExternalChannelType.Booking => "Booking externo",
+            ExternalChannelType.Airbnb => "Airbnb externo",
+            _ => "Canal externo"
+        };
+
+        return new RangeBar
+        {
+            Kind = "external",
+            Title = string.IsNullOrWhiteSpace(externalEvent.Summary) ? label : externalEvent.Summary!,
+            Tooltip = $"{label} | {externalEvent.StartDate:dd/MM} - {externalEvent.EndDate:dd/MM} | {externalEvent.Summary}",
+            CssClass = externalEvent.SourceChannel == ExternalChannelType.Booking ? "external-booking-bar" : externalEvent.SourceChannel == ExternalChannelType.Airbnb ? "external-airbnb-bar" : "external-other-bar",
+            Style = $"left:{left}px;width:{width}px;",
+        };
+    }
+
+    private RangeBar? BuildBlockedBar(BlockedDateDto blocked)
+    {
+        var start = blocked.DateFrom < _from ? _from : blocked.DateFrom;
+        var endExclusive = blocked.DateTo > _toExclusive ? _toExclusive : blocked.DateTo;
+        if (endExclusive <= _from || start >= _toExclusive || endExclusive <= start)
+            return null;
+
+        var left = (_rangeDays.IndexOf(start) * DayWidth) + 4m;
+        var width = (((decimal)(endExclusive.DayNumber - start.DayNumber)) * DayWidth) - 8m;
+        if (width < 18m)
+            width = 18m;
+
+        return new RangeBar
+        {
+            Kind = "blocked",
+            Title = string.IsNullOrWhiteSpace(blocked.Reason) ? "Bloqueo" : blocked.Reason!,
+            Tooltip = $"Bloqueado | {blocked.DateFrom:dd/MM} - {blocked.DateTo:dd/MM} | {blocked.Reason}",
+            CssClass = "blocked-bar",
+            Style = $"left:{left}px;width:{width}px;",
+        };
+    }
+
+    private static string BookingCssClass(BookingStatus status) => status switch
+    {
+        BookingStatus.Tentative => "booking-tentative",
+        BookingStatus.Confirmed => "booking-confirmed",
+        BookingStatus.CheckedIn => "booking-checkedin",
+        BookingStatus.CheckedOut => "booking-checkedout",
+        BookingStatus.Cancelled => "booking-cancelled",
+        BookingStatus.Inquiry => "booking-inquiry",
+        _ => "booking-confirmed"
+    };
+
+    private Task HandleBarClick(RangeBar bar, int unitId)
+    {
+        if (bar.Kind == "booking")
+        {
+            OpenBooking(bar.BookingId);
+            return Task.CompletedTask;
+        }
+
+        if (bar.Kind == "external")
+            return Task.CompletedTask;
+
+        OpenBlockModalForUnit(unitId);
+        return Task.CompletedTask;
+    }
+
+    private void OnFromChanged(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), out var d))
+            _from = d;
+    }
+
+    private bool _blockModalOpen;
+    private int _blockUnitId;
+    private DateOnly _blockFrom = DateOnly.FromDateTime(DateTime.Today);
+    private DateOnly _blockTo = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+    private string? _blockReason;
+    private string _blockFromStr => _blockFrom.ToString("yyyy-MM-dd");
+    private string _blockToStr => _blockTo.ToString("yyyy-MM-dd");
+
+    private void OpenBlockModal()
+    {
+        _blockUnitId = _selectedUnitId > 0 ? _selectedUnitId : _units.FirstOrDefault()?.Id ?? 0;
+        _blockFrom = _from;
+        _blockTo = _from.AddDays(1);
+        _blockReason = "Mantenimiento";
+        _blockModalOpen = true;
+    }
+
+    private void OpenBlockModalForUnit(int unitId)
+    {
+        _selectedUnitId = unitId;
+        OpenBlockModal();
+    }
+
+    private void CloseBlockModal() => _blockModalOpen = false;
+    private void OnBlockFromChanged(ChangeEventArgs e) { if (DateOnly.TryParse(e.Value?.ToString(), out var d)) _blockFrom = d; }
+    private void OnBlockToChanged(ChangeEventArgs e) { if (DateOnly.TryParse(e.Value?.ToString(), out var d)) _blockTo = d; }
+
+    private async Task SaveBlocked()
+    {
+        await Api.PostJsonAsync<AppResult<int>, CreateBlockedDateCommand>($"api/properties/{PropertyId}/blockedDates", new CreateBlockedDateCommand(PropertyId, _blockUnitId, _blockFrom, _blockTo, _blockReason));
+        _blockModalOpen = false;
+        await Load();
+        Api.Toast("Bloqueo guardado correctamente.");
+    }
+
+    private sealed class RangeBar
+    {
+        public string Kind { get; set; } = string.Empty;
+        public int BookingId { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string Tooltip { get; set; } = string.Empty;
+        public string CssClass { get; set; } = string.Empty;
+        public string Style { get; set; } = string.Empty;
+    }
+}

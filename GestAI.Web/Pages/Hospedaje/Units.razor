@@ -1,0 +1,109 @@
+@page "/units/{PropertyId:int}"
+@using GestAI.Web.Dtos
+@inject ApiClient Api
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<div class="pagetitle d-flex justify-content-between align-items-center">
+    <div>
+        <h1>Unidades</h1>
+        <p class="text-muted mb-0">Gestioná las unidades del hospedaje, su capacidad, precio base y disponibilidad operativa.</p>
+    </div>
+    <button class="btn btn-primary" @onclick='() => Nav.NavigateTo($"/units/{PropertyId}/new")'>
+        <i class="bi bi-plus-circle me-1"></i> Nueva unidad
+    </button>
+</div>
+
+<div class="card">
+    <div class="card-body pt-3">
+        <div class="row g-2 mb-3">
+            <div class="col-md-5"><input class="form-control" placeholder="Buscar unidad" @bind="_search" /></div>
+            <div class="col-md-3"><select class="form-select" @bind="_activeFilter"><option value="all">Todos</option><option value="active">Activas</option><option value="inactive">Inactivas</option></select></div>
+        </div>
+
+        @if (!_loaded)
+        {
+            <EmptyState Title="Cargando información" Description="Estamos trayendo los datos de esta pantalla." Icon="bi-hourglass-split" />
+        }
+        else if (!Filtered.Any())
+        {
+            <EmptyState Title="No hay unidades para mostrar" Description="Ajustá los filtros o cargá una nueva unidad." Icon="bi-house" />
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table align-middle table-sm">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Capacidad</th>
+                            <th>Tarifa base</th>
+                            <th>Estado</th>
+                            <th>Operativa</th>
+                            <th class="text-end">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var u in Filtered)
+                    {
+                        <tr>
+                            <td>
+                                <strong>@u.Name</strong>
+                                @if (!string.IsNullOrWhiteSpace(u.ShortDescription))
+                                {
+                                    <div class="small text-muted">@u.ShortDescription</div>
+                                }
+                            </td>
+                            <td>@u.CapacityAdults adultos · @u.CapacityChildren niños · total @u.TotalCapacity</td>
+                            <td>@u.BaseRate.ToString("0.00")</td>
+                            <td><StatusBadge IsActive="@u.IsActive" Text="@(u.IsActive ? "Activa" : "Inactiva")" /></td>
+                            <td><span class="badge bg-light text-dark border">@u.OperationalStatus</span></td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-primary me-1" @onclick='() => Nav.NavigateTo($"/units/{PropertyId}/{u.Id}/edit")'>Editar</button>
+                                <button class="btn btn-sm @(u.IsActive ? "btn-outline-warning" : "btn-outline-success")" @onclick='() => ToggleActive(u)'>@(u.IsActive ? "Desactivar" : "Reactivar")</button>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+@code{
+    [Parameter] public int PropertyId { get; set; }
+
+    private bool _loaded;
+    private List<UnitListItemDto> _units = new();
+    private string _search = string.Empty;
+    private string _activeFilter = "all";
+
+    private IEnumerable<UnitListItemDto> Filtered => _units.Where(x =>
+        (_activeFilter == "all" || (_activeFilter == "active" && x.IsActive) || (_activeFilter == "inactive" && !x.IsActive))
+        && (string.IsNullOrWhiteSpace(_search) || x.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)));
+
+    protected override async Task OnParametersSetAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loaded = false;
+        var res = await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units");
+        _units = res?.Data ?? new();
+        _loaded = true;
+    }
+
+    private async Task ToggleActive(UnitListItemDto unit)
+    {
+        if (unit.IsActive)
+        {
+            var confirmed = await JS.InvokeAsync<bool>("confirm", $"¿Desactivar la unidad '{unit.Name}'? No estará disponible para cotizaciones ni reservas.");
+            if (!confirmed) return;
+        }
+
+        var cmd = new UpsertUnitCommand(PropertyId, unit.Id, unit.Name, unit.CapacityAdults, unit.CapacityChildren, unit.BaseRate, unit.TotalCapacity, unit.ShortDescription, !unit.IsActive, unit.DisplayOrder, unit.IsActive ? UnitOperationalStatus.Maintenance : UnitOperationalStatus.Available);
+        var res = await Api.PutAsync<UpsertUnitCommand, AppResult<int>>($"api/properties/{PropertyId}/units/{unit.Id}", cmd);
+        Api.Toast(res?.Success == true ? "Unidad actualizada." : (res?.Message ?? "No se pudo actualizar la unidad."));
+        await Load();
+    }
+}

@@ -1,0 +1,337 @@
+@page "/bookings/new/{PropertyId:int}"
+@inject ApiClient Api
+@inject NavigationManager Nav
+@using GestAI.Web.Dtos
+
+<div class="pagetitle">
+    <h1>@(BookingId.HasValue ? "Editar reserva" : "Nueva reserva")</h1>
+</div>
+
+@if (!_loaded)
+{
+    <p>Cargando...</p>
+}
+else
+{
+    <div class="row g-3">
+        <div class="col-12 col-lg-8">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Datos</h5>
+
+                    @if (!string.IsNullOrWhiteSpace(_error))
+                    {
+                        <div class="alert alert-danger">@_error</div>
+                    }
+
+                    <div class="row g-2">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Unidad</label>
+                            <select class="form-select" @bind="_unitId">
+                                <option value="0">-- Seleccionar --</option>
+                                @foreach (var u in _units)
+                                {
+                                    <option value="@u.Id">@u.Name</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-12 col-md-3">
+                            <label class="form-label">Check-in</label>
+                            <input class="form-control" type="date" value="@_checkInStr" @onchange="OnCheckInChanged" />
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label class="form-label">Check-out (excl.)</label>
+                            <input class="form-control" type="date" value="@_checkOutStr" @onchange="OnCheckOutChanged" />
+                        </div>
+
+                        <div class="col-12 col-md-3">
+                            <label class="form-label">Adultos</label>
+                            <input class="form-control" type="number" min="1" @bind="_adults" />
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label class="form-label">Niños</label>
+                            <input class="form-control" type="number" min="0" @bind="_children" />
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label class="form-label">Origen</label>
+                            <select class="form-select" @bind="_source">
+                                @foreach (var source in Enum.GetValues<BookingSource>())
+                                {
+                                    <option value="@source">@source</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label class="form-label">Estado</label>
+                            <select class="form-select" @bind="_status">
+                                @foreach (var status in Enum.GetValues<BookingStatus>())
+                                {
+                                    <option value="@status">@status</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Total</label>
+                            <input class="form-control" type="number" step="0.01" min="0" @bind="_totalAmount" />
+                        </div>
+                        <div class="col-12 col-md-6 form-check mt-4 ps-5">
+                            <input class="form-check-input" type="checkbox" @bind="_manualPriceOverride" id="manualOverride" />
+                            <label class="form-check-label" for="manualOverride">Precio manual (override)</label>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label">Huésped</label>
+                            <div class="input-group">
+                                <input class="form-control" value="@_guestQuery" placeholder="Buscar por nombre/teléfono/email" @oninput="GuestSearch" />
+                                <button class="btn btn-outline-secondary" @onclick="OpenQuickGuest">Crear rápido</button>
+                            </div>
+                            @if (_guestResults is not null && _guestResults.Count > 0)
+                            {
+                                <div class="list-group mt-2">
+                                    @foreach (var g in _guestResults)
+                                    {
+                                        <button type="button" class="list-group-item list-group-item-action" @onclick="(()=>SelectGuest(g))">
+                                            <div class="d-flex justify-content-between">
+                                                <div>
+                                                    <strong>@g.FullName</strong>
+                                                    <div class="text-muted small">@g.Phone @g.Email</div>
+                                                </div>
+                                                <span class="badge bg-primary">Seleccionar</span>
+                                            </div>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                            @if (_guestId > 0)
+                            {
+                                <div class="alert alert-info mt-2">Seleccionado: <strong>@_guestSelectedName</strong></div>
+                            }
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label">Notas internas</label>
+                            <textarea class="form-control" rows="3" @bind="_internalNotes"></textarea>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Notas generales</label>
+                            <textarea class="form-control" rows="3" @bind="_notes"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 d-flex gap-2">
+                        <button class="btn btn-outline-secondary" @onclick="Back">Cancelar</button>
+                        <button class="btn btn-primary" disabled="@_saving" @onclick="Save">Guardar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Ayuda operativa</h5>
+                    <ul class="mb-0">
+                        <li>No se permiten solapamientos con reservas activas.</li>
+                        <li>No se permiten cambios sobre fechas bloqueadas.</li>
+                        <li>Si reducís la estadía y hay pagos, el sistema pedirá confirmación.</li>
+                        <li>Si activás override manual, el sistema pedirá confirmación.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_guestModalOpen)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Crear huésped rápido</h5>
+                    <button type="button" class="btn-close" @onclick="CloseQuickGuest"></button>
+                </div>
+                <div class="modal-body">
+                    @if (!string.IsNullOrWhiteSpace(_guestError))
+                    {
+                        <div class="alert alert-danger">@_guestError</div>
+                    }
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <label class="form-label">Nombre completo</label>
+                            <input class="form-control" @bind="_quickGuestFullName" />
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Teléfono</label>
+                            <input class="form-control" @bind="_quickGuestPhone" />
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Email</label>
+                            <input class="form-control" @bind="_quickGuestEmail" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" @onclick="CloseQuickGuest">Cancelar</button>
+                    <button class="btn btn-primary" @onclick="SaveQuickGuest">Crear y seleccionar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code{
+    [Parameter] public int PropertyId { get; set; }
+    [SupplyParameterFromQuery] public int? UnitId { get; set; }
+    [SupplyParameterFromQuery] public string? CheckIn { get; set; }
+    [SupplyParameterFromQuery] public string? CheckOut { get; set; }
+    [SupplyParameterFromQuery] public int? Adults { get; set; }
+    [SupplyParameterFromQuery] public int? Children { get; set; }
+    [SupplyParameterFromQuery] public decimal? Total { get; set; }
+    [SupplyParameterFromQuery(Name = "bookingId")] public int? BookingId { get; set; }
+
+    private bool _loaded;
+    private bool _saving;
+    private string? _error;
+
+    private List<UnitListItemDto> _units = new();
+    private int _unitId;
+    private DateOnly _checkIn = DateOnly.FromDateTime(DateTime.Today);
+    private DateOnly _checkOut = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+    private int _adults = 2;
+    private int _children = 0;
+    private decimal _totalAmount = 0;
+    private string? _notes;
+    private string? _internalNotes;
+    private BookingSource _source = BookingSource.Direct;
+    private BookingStatus _status = BookingStatus.Tentative;
+    private bool _manualPriceOverride;
+    private bool _confirmManualPriceChange;
+    private bool _confirmReduceStayWithPayments;
+
+    private string _checkInStr { get => _checkIn.ToString("yyyy-MM-dd"); set { if (DateOnly.TryParse(value, out var d)) _checkIn = d; } }
+    private string _checkOutStr { get => _checkOut.ToString("yyyy-MM-dd"); set { if (DateOnly.TryParse(value, out var d)) _checkOut = d; } }
+
+    private string _guestQuery = "";
+    private List<GuestSearchItemDto>? _guestResults;
+    private int _guestId;
+    private string _guestSelectedName = "";
+    private bool _guestModalOpen;
+    private string? _guestError;
+    private string _quickGuestFullName = "";
+    private string? _quickGuestPhone;
+    private string? _quickGuestEmail;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var uRes = await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units");
+        _units = uRes?.Data ?? new();
+        _unitId = UnitId ?? _units.FirstOrDefault()?.Id ?? 0;
+        if (DateOnly.TryParse(CheckIn, out var ci)) _checkIn = ci;
+        if (DateOnly.TryParse(CheckOut, out var co)) _checkOut = co;
+        if (Adults.HasValue) _adults = Adults.Value;
+        if (Children.HasValue) _children = Children.Value;
+        if (Total.HasValue) _totalAmount = Total.Value;
+
+        if (BookingId.HasValue)
+        {
+            var detail = (await Api.GetAsync<AppResult<BookingDetailDto>>($"api/properties/{PropertyId}/bookings/{BookingId.Value}"))?.Data;
+            if (detail is not null)
+            {
+                _unitId = detail.UnitId;
+                _checkIn = detail.CheckInDate;
+                _checkOut = detail.CheckOutDate;
+                _adults = detail.Adults;
+                _children = detail.Children;
+                _totalAmount = detail.TotalAmount;
+                _notes = detail.Notes;
+                _internalNotes = detail.InternalNotes;
+                _source = detail.Source;
+                _status = detail.Status;
+                _manualPriceOverride = detail.ManualPriceOverride;
+                _guestId = detail.GuestId;
+                _guestSelectedName = detail.GuestName;
+                _guestQuery = detail.GuestName;
+            }
+        }
+
+        _loaded = true;
+    }
+
+    private async Task GuestSearch(ChangeEventArgs e)
+    {
+        _guestQuery = e.Value?.ToString() ?? "";
+        var q = (_guestQuery ?? "").Trim();
+        if (q.Length < 2)
+        {
+            _guestResults = null;
+            return;
+        }
+
+        var res = await Api.GetAsync<AppResult<List<GuestSearchItemDto>>>($"api/properties/{PropertyId}/guests/search?q={Uri.EscapeDataString(q)}");
+        _guestResults = res?.Data ?? new();
+    }
+
+    private void SelectGuest(GuestSearchItemDto g)
+    {
+        _guestId = g.Id;
+        _guestSelectedName = g.FullName;
+        _guestResults = null;
+        _guestQuery = g.FullName;
+    }
+
+    private async Task Save()
+    {
+        _error = null;
+        _saving = true;
+
+        if (_unitId <= 0) { _error = "Seleccioná una unidad."; _saving = false; return; }
+        if (_guestId <= 0) { _error = "Seleccioná o creá un huésped."; _saving = false; return; }
+        if (_checkOut <= _checkIn) { _error = "Check-out debe ser mayor a check-in."; _saving = false; return; }
+
+        var cmd = new UpsertBookingCommand(PropertyId, BookingId, _unitId, _guestId, _checkIn, _checkOut, _adults, _children, _totalAmount, _notes, _source, _status, _manualPriceOverride, _internalNotes, null, 0m, false, false, null, null, null, null, null, _confirmManualPriceChange, _confirmReduceStayWithPayments);
+        var res = await Api.PostJsonAsync<AppResult<int>, UpsertBookingCommand>($"api/properties/{PropertyId}/bookings", cmd);
+
+        if (res?.Success != true || res.Data <= 0)
+        {
+            if (res?.ErrorCode == "warn_manual_price" && !_confirmManualPriceChange)
+            {
+                _confirmManualPriceChange = true;
+                await Save();
+                return;
+            }
+            if (res?.ErrorCode == "warn_reduce_with_payments" && !_confirmReduceStayWithPayments)
+            {
+                _confirmReduceStayWithPayments = true;
+                await Save();
+                return;
+            }
+
+            _error = res?.Message ?? "No se pudo guardar la reserva.";
+            _saving = false;
+            return;
+        }
+
+        _saving = false;
+        Nav.NavigateTo($"/bookings/{PropertyId}/{res.Data}", replace: true);
+    }
+
+    private void Back() => Nav.NavigateTo(BookingId.HasValue ? $"/bookings/{PropertyId}/{BookingId.Value}" : $"/bookings/grid/{PropertyId}");
+    private void OpenQuickGuest() { _guestError = null; _quickGuestFullName = ""; _quickGuestPhone = null; _quickGuestEmail = null; _guestModalOpen = true; }
+    private void CloseQuickGuest() { _guestModalOpen = false; _guestError = null; }
+
+    private async Task SaveQuickGuest()
+    {
+        _guestError = null;
+        if (string.IsNullOrWhiteSpace(_quickGuestFullName)) { _guestError = "El nombre es obligatorio."; return; }
+        var cmd = new UpsertGuestCommand(PropertyId, null, _quickGuestFullName, _quickGuestPhone, _quickGuestEmail, null, null, null);
+        var res = await Api.PostJsonAsync<AppResult<int>, UpsertGuestCommand>($"api/properties/{PropertyId}/guests", cmd);
+        if (res?.Success != true || res.Data <= 0) { _guestError = res?.Message ?? "No se pudo crear el huésped."; return; }
+        _guestId = res.Data; _guestSelectedName = _quickGuestFullName; _guestQuery = _quickGuestFullName; _guestModalOpen = false;
+    }
+
+    private void OnCheckInChanged(ChangeEventArgs e) { if (DateOnly.TryParse(e.Value?.ToString(), out var d)) _checkIn = d; }
+    private void OnCheckOutChanged(ChangeEventArgs e) { if (DateOnly.TryParse(e.Value?.ToString(), out var d)) _checkOut = d; }
+}

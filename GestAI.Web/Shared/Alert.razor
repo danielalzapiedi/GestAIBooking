@@ -1,0 +1,12 @@
+﻿@if (!string.IsNullOrEmpty(Message?.Trim()))
+{
+    <div class="alert @CssClass alert-dismissible fade show" role="alert">
+        @Message
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@code {
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public string CssClass { get; set; } = "alert-danger";
+}

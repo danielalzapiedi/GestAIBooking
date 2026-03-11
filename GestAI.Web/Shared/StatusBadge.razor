@@ -1,0 +1,55 @@
+@using System.Globalization
+
+<span class="badge rounded-pill @CssClass">@Label</span>
+
+@code {
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public bool? IsActive { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+
+    private string Label => !string.IsNullOrWhiteSpace(Text)
+        ? Translate(Text!)
+        : IsActive.HasValue
+            ? (IsActive.Value ? "Activo" : "Inactivo")
+            : string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        if (!string.IsNullOrWhiteSpace(CssClass))
+            return;
+
+        if (IsActive.HasValue)
+        {
+            CssClass = IsActive.Value ? "ui-badge ui-badge-success" : "ui-badge ui-badge-neutral";
+            return;
+        }
+
+        var normalized = (Text ?? string.Empty).Trim().ToLowerInvariant();
+        CssClass = normalized switch
+        {
+            "activo" or "activa" or "confirmed" or "confirmada" or "converted" or "checkin" or "checkedin" or "checked in" => "ui-badge ui-badge-success",
+            "tentative" or "tentativa" or "draft" or "saved" => "ui-badge ui-badge-warning",
+            "checkedout" or "checked out" or "checkout" or "finalizada" => "ui-badge ui-badge-info",
+            "cancelled" or "cancelada" or "inactive" or "inactivo" or "inactiva" or "deleted" or "eliminada" => "ui-badge ui-badge-neutral",
+            _ => "ui-badge ui-badge-primary"
+        };
+    }
+
+    private static string Translate(string text)
+    {
+        var normalized = text.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "confirmed" => "Confirmada",
+            "tentative" => "Tentativa",
+            "checkedin" or "checked in" or "checkin" => "Check-in",
+            "checkedout" or "checked out" or "checkout" => "Check-out",
+            "cancelled" => "Cancelada",
+            "saved" => "Guardada",
+            "draft" => "Borrador",
+            "active" => "Activo",
+            "inactive" => "Inactivo",
+            _ => CultureInfo.CurrentCulture.TextInfo.ToTitleCase(text)
+        };
+    }
+}

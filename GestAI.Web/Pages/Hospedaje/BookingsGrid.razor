@@ -1,0 +1,162 @@
+@page "/bookings/grid/{PropertyId:int}"
+@inject ApiClient Api
+@inject NavigationManager Nav
+@using GestAI.Web.Dtos
+
+<div class="pagetitle">
+    <h1>Reservas</h1>
+    <p class="text-muted mb-0">Listado operativo con filtros rápidos, búsqueda simple y acceso a acciones por fila.</p>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-12 col-md-3">
+                <label class="form-label">Desde</label>
+                <input class="form-control" type="date" value="@_fromStr" @onchange="OnFromChanged" />
+            </div>
+            <div class="col-12 col-md-3">
+                <label class="form-label">Hasta</label>
+                <input class="form-control" type="date" value="@_toStr" @onchange="OnToChanged" />
+            </div>
+            <div class="col-12 col-md-3">
+                <label class="form-label">Buscar</label>
+                <input class="form-control table-search-inline" @bind="_search" placeholder="Huésped, unidad o código" />
+            </div>
+            <div class="col-12 col-md-3 d-flex justify-content-md-end gap-2 flex-wrap">
+                <button class="btn btn-outline-primary" @onclick="Load"><i class="bi bi-arrow-repeat"></i> Actualizar</button>
+                <button class="btn btn-primary" @onclick="NewBooking"><i class="bi bi-plus"></i> Nueva reserva</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (!_loaded)
+{
+    <EmptyState Title="Cargando reservas" Description="Estamos consultando las reservas del período seleccionado." Icon="bi-journal-bookmark" />
+}
+else if (_bookings is null)
+{
+    <EmptyState Title="No se pudieron cargar las reservas" Description="Reintentá para volver a obtener el listado." Icon="bi-exclamation-triangle" />
+}
+else if (!FilteredBookings.Any())
+{
+    <EmptyState Title="No hay resultados" Description="No encontramos reservas con los filtros y la búsqueda actual." Icon="bi-search">
+        <button class="btn btn-outline-primary" @onclick="ClearSearch">Limpiar búsqueda</button>
+    </EmptyState>
+}
+else
+{
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                <h5 class="card-title mb-0">Listado de reservas</h5>
+                <span class="text-muted small">@FilteredBookings.Count reserva(s)</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Reserva</th>
+                            <th>Huésped</th>
+                            <th>Estadía</th>
+                            <th>Estado</th>
+                            <th class="text-end">Total</th>
+                            <th class="text-end">Pendiente</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var booking in FilteredBookings)
+                        {
+                            <tr>
+                                <td>
+                                    <strong>@booking.BookingCode</strong>
+                                    <div class="small text-muted">@booking.UnitName · @booking.Nights noche(s)</div>
+                                </td>
+                                <td>
+                                    @booking.GuestName
+                                    <div class="small text-muted">@booking.Adults adultos · @booking.Children niños</div>
+                                </td>
+                                <td>
+                                    @booking.CheckInDate.ToString("dd/MM/yyyy")
+                                    <div class="small text-muted">a @booking.CheckOutDate.ToString("dd/MM/yyyy")</div>
+                                </td>
+                                <td><StatusBadge Text="@booking.Status.ToString()" /></td>
+                                <td class="text-end">@booking.TotalAmount.ToString("0.00")</td>
+                                <td class="text-end">@booking.PendingAmount.ToString("0.00")</td>
+                                <td class="text-end">
+                                    <div class="table-actions">
+                                        <button class="btn btn-sm btn-outline-primary" @onclick="() => OpenDetail(booking.Id)"><i class="bi bi-eye"></i></button>
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => Cancel(booking.Id)"><i class="bi bi-x-circle"></i></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+@code{
+    [Parameter] public int PropertyId { get; set; }
+
+    private bool _loaded;
+    private List<BookingListItemDto>? _bookings;
+    private string _search = string.Empty;
+    private DateOnly _from = DateOnly.FromDateTime(DateTime.Today.AddDays(-7));
+    private DateOnly _to = DateOnly.FromDateTime(DateTime.Today.AddDays(30));
+
+    private List<BookingListItemDto> FilteredBookings => (_bookings ?? new())
+        .Where(booking => string.IsNullOrWhiteSpace(_search)
+            || booking.GuestName.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || booking.UnitName.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || booking.BookingCode.Contains(_search, StringComparison.OrdinalIgnoreCase))
+        .OrderBy(booking => booking.CheckInDate)
+        .ToList();
+
+    private string _fromStr
+    {
+        get => _from.ToString("yyyy-MM-dd");
+        set { if (DateOnly.TryParse(value, out var d)) _from = d; }
+    }
+
+    private string _toStr
+    {
+        get => _to.ToString("yyyy-MM-dd");
+        set { if (DateOnly.TryParse(value, out var d)) _to = d; }
+    }
+
+    protected override async Task OnParametersSetAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loaded = false;
+        var res = await Api.GetAsync<AppResult<List<BookingListItemDto>>>($"api/properties/{PropertyId}/bookings?from={_from:yyyy-MM-dd}&to={_to:yyyy-MM-dd}");
+        _bookings = res?.Data;
+        _loaded = true;
+    }
+
+    private void NewBooking() => Nav.NavigateTo($"/bookings/new/{PropertyId}");
+    private void OpenDetail(int bookingId) => Nav.NavigateTo($"/bookings/{PropertyId}/{bookingId}");
+
+    private async Task Cancel(int bookingId)
+    {
+        await Api.DeleteAsync<AppResult>($"api/properties/{PropertyId}/bookings/{bookingId}");
+        await Load();
+    }
+
+    private void OnFromChanged(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), out var d)) _from = d;
+    }
+
+    private void OnToChanged(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), out var d)) _to = d;
+    }
+
+    private void ClearSearch() => _search = string.Empty;
+}
