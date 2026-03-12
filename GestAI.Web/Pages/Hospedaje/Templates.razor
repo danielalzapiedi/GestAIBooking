@@ -15,27 +15,45 @@ else if (!_templatesEnabled)
 }
 else
 {
-<h1 class="h3 mb-3">Plantillas</h1>
-@if (_templates is null) { <p>Cargando...</p> } else {
-<div class="row g-3">
-@foreach (var t in _templates)
-{
-    <div class="col-12 col-lg-6"><div class="card"><div class="card-body"><h5 class="card-title">@t.Type · @t.Name</h5><pre class="small mb-0" style="white-space:pre-wrap">@t.Body</pre></div></div></div>
+    <h1 class="h3 mb-3">Plantillas</h1>
+    @if (_templates is null)
+    {
+        <p>Cargando...</p>
+    }
+    else
+    {
+        <div class="row g-3">
+            @foreach (var t in _templates)
+            {
+                <div class="col-12 col-lg-6">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">@t.Type · @t.Name</h5>
+                            <pre class="small mb-0" style="white-space:pre-wrap">@t.Body</pre>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
 }
-</div>
-}
-}
+
 @code {
-[Parameter] public int PropertyId { get; set; }
-private List<MessageTemplateDto>? _templates;
-private bool _featureChecked;
-private bool _templatesEnabled = true;
-protected override async Task OnParametersSetAsync()
-{
-    var settings = await FeatureState.EnsureAsync(PropertyId);
-    _templatesEnabled = settings?.EnableTemplates ?? true;
-    _featureChecked = true;
-    if (_templatesEnabled)
-        _templates = (await Api.GetAsync<AppResult<List<MessageTemplateDto>>>($"api/properties/{PropertyId}/templates"))?.Data ?? new();
-}
+    [Parameter] public int PropertyId { get; set; }
+
+    private List<MessageTemplateDto>? _templates;
+    private bool _featureChecked;
+    private bool _templatesEnabled = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var settings = await FeatureState.EnsureAsync(PropertyId);
+        _templatesEnabled = settings?.EnableTemplates ?? true;
+        _featureChecked = true;
+
+        if (_templatesEnabled)
+        {
+            _templates = (await Api.GetAsync<AppResult<List<MessageTemplateDto>>>($"api/properties/{PropertyId}/templates"))?.Data ?? new();
+        }
+    }
 }
