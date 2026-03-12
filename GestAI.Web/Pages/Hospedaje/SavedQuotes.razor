@@ -2,9 +2,21 @@
 @using GestAI.Web.Dtos
 @inject ApiClient Api
 @inject NavigationManager Nav
+@inject GestAI.Web.Service.PropertyFeatureState FeatureState
 
 <PageTitle>Cotizaciones guardadas</PageTitle>
 
+@if (!_featureChecked)
+{
+    <EmptyState Title="Cargando configuración" Description="Estamos validando las funciones habilitadas para este hospedaje." Icon="bi-hourglass-split" />
+}
+else if (!_savedQuotesEnabled)
+{
+    <EmptyState Title="Funcionalidad desactivada" Description="Las cotizaciones guardadas están desactivadas para este hospedaje." Icon="bi-toggle-off" />
+    <button class="btn btn-outline-primary" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>Ir al dashboard</button>
+}
+else
+{
 <div class="pagetitle d-flex justify-content-between align-items-center">
     <div>
         <h1>Cotizaciones guardadas</h1>
@@ -87,9 +99,12 @@ else
         }
     </div></div>
 }
+}
 
 @code {
     [Parameter] public int PropertyId { get; set; }
+    private bool _featureChecked;
+    private bool _savedQuotesEnabled = true;
     private List<SavedQuoteDto> _items = new();
     private SavedQuoteDto? _selected;
     private string? _search;
@@ -98,7 +113,14 @@ else
     private string? _message;
     private bool _success;
 
-    protected override async Task OnParametersSetAsync() => await Load();
+    protected override async Task OnParametersSetAsync()
+    {
+        var settings = await FeatureState.EnsureAsync(PropertyId);
+        _savedQuotesEnabled = settings?.EnableSavedQuotes ?? true;
+        _featureChecked = true;
+        if (_savedQuotesEnabled)
+            await Load();
+    }
 
     private async Task Load()
     {

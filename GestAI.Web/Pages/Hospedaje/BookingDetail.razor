@@ -1,6 +1,7 @@
 @page "/bookings/{PropertyId:int}/{BookingId:int}"
 @inject ApiClient Api
 @inject NavigationManager Nav
+@inject GestAI.Web.Service.PropertyFeatureState FeatureState
 @using GestAI.Web.Dtos
 
 <div class="pagetitle d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -39,7 +40,10 @@ else
                                 <div class="d-flex gap-2 flex-wrap">
                                     <span class="badge @StatusBadge(_booking.Status)">@_booking.Status</span>
                                     <span class="badge @OperationalBadge(_booking.OperationalStatus)">@_booking.OperationalStatus</span>
-                                    <span class="badge @PaymentBadgeClass()">@PaymentBadgeText()</span>
+                                    @if (_paymentsEnabled)
+                                    {
+                                        <span class="badge @PaymentBadgeClass()">@PaymentBadgeText()</span>
+                                    }
                                 </div>
                             </div>
 
@@ -106,8 +110,11 @@ else
                                 <div class="detail-metric"><div class="detail-metric-label">Promociones</div><div class="detail-metric-value text-success">- @_booking.PromotionsAmount.ToString("0.00")</div></div>
                                 <div class="detail-metric"><div class="detail-metric-label">Total</div><div class="detail-metric-value">@_booking.TotalAmount.ToString("0.00")</div></div>
                                 <div class="detail-metric"><div class="detail-metric-label">Seña esperada</div><div class="detail-metric-value">@_booking.ExpectedDepositAmount.ToString("0.00")</div></div>
-                                <div class="detail-metric"><div class="detail-metric-label">Pagado</div><div class="detail-metric-value">@_booking.PaidAmount.ToString("0.00")</div></div>
-                                <div class="detail-metric"><div class="detail-metric-label">Saldo pendiente</div><div class="detail-metric-value text-danger">@_booking.PendingAmount.ToString("0.00")</div></div>
+                                @if (_paymentsEnabled)
+                                {
+                                    <div class="detail-metric"><div class="detail-metric-label">Pagado</div><div class="detail-metric-value">@_booking.PaidAmount.ToString("0.00")</div></div>
+                                    <div class="detail-metric"><div class="detail-metric-label">Saldo pendiente</div><div class="detail-metric-value text-danger">@_booking.PendingAmount.ToString("0.00")</div></div>
+                                }
                             </div>
 
                             @if (_booking.PricingLines.Count > 0)
@@ -129,6 +136,8 @@ else
                     </div>
                 </div>
 
+                @if (_paymentsEnabled)
+                {
                 <div class="col-12">
                     <div class="card">
                         <div class="card-body">
@@ -160,6 +169,7 @@ else
                         </div>
                     </div>
                 </div>
+                }
 
                 <div class="col-12">
                     <div class="card">
@@ -235,7 +245,7 @@ else
     </div>
 }
 
-@if (_payModalOpen)
+@if (_payModalOpen && _paymentsEnabled)
 {
     <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,.5);">
         <div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Registrar pago</h5><button type="button" class="btn-close" @onclick="ClosePaymentModal"></button></div>
@@ -289,6 +299,7 @@ else
     private bool _loaded;
     private BookingDetailDto? _booking;
     private List<PaymentDto>? _payments;
+    private bool _paymentsEnabled = true;
     private string? _error;
     private string? _message;
     private BookingStatus _newStatus;
@@ -324,8 +335,12 @@ else
     {
         _loaded = false;
         _error = null;
+        var settings = await FeatureState.EnsureAsync(PropertyId);
+        _paymentsEnabled = settings?.EnablePayments ?? true;
         _booking = (await Api.GetAsync<AppResult<BookingDetailDto>>($"api/properties/{PropertyId}/bookings/{BookingId}"))?.Data;
-        _payments = (await Api.GetAsync<AppResult<List<PaymentDto>>>($"api/properties/{PropertyId}/bookings/{BookingId}/payments"))?.Data ?? new();
+        _payments = _paymentsEnabled
+            ? (await Api.GetAsync<AppResult<List<PaymentDto>>>($"api/properties/{PropertyId}/bookings/{BookingId}/payments"))?.Data ?? new()
+            : new();
         if (_booking is not null)
         {
             _newStatus = _booking.Status;
@@ -351,6 +366,9 @@ else
 
     private void OpenPaymentModal()
     {
+        if (!_paymentsEnabled)
+            return;
+
         _paymentAmount = _booking?.PendingAmount > 0 ? _booking.PendingAmount : 0m;
         _paymentMethod = PaymentMethod.Transfer;
         _paymentStatus = PaymentStatus.Paid;

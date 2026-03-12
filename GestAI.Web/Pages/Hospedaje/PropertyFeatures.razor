@@ -1,6 +1,7 @@
 @page "/properties/{PropertyId:int}/features"
 @using GestAI.Web.Dtos
 @inject ApiClient Api
+@inject GestAI.Web.Service.PropertyFeatureState FeatureState
 
 <PageTitle>Configuración funcional</PageTitle>
 
@@ -31,9 +32,13 @@ else
                 @foreach (var item in group.Items)
                 {
                     <div class="form-check form-switch mb-2">
-                        <input class="form-check-input" type="checkbox" checked="@item.Getter()" @onchange="e => item.Setter((bool)e.Value!)" />
+                        <input class="form-check-input" type="checkbox" checked="@item.Getter()" disabled="@item.Disabled" @onchange="e => item.Setter((bool)e.Value!)" />
                         <label class="form-check-label fw-semibold">@item.Label</label>
                         <div class="small text-muted">@item.Description</div>
+                        @if (!string.IsNullOrWhiteSpace(item.Helper))
+                        {
+                            <div class="small text-secondary">@item.Helper</div>
+                        }
                     </div>
                 }
             </div>
@@ -48,44 +53,53 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
-        var res = await Api.GetAsync<AppResult<PropertyFeatureSettingsDto>>($"api/properties/{PropertyId}/feature-settings");
-        _settings = res?.Data;
+        _settings = await FeatureState.EnsureAsync(PropertyId);
     }
 
-    private IReadOnlyList<(string Title, List<(string Label, string Description, Func<bool> Getter, Action<bool> Setter)> Items)> Groups
+    private IReadOnlyList<(string Title, List<(string Label, string Description, string? Helper, bool Disabled, Func<bool> Getter, Action<bool> Setter)> Items)> Groups
         => _settings is null
             ? []
             :
             [
-                ("Operación", new List<(string, string, Func<bool>, Action<bool>)>
+                ("Operación", new List<(string, string, string?, bool, Func<bool>, Action<bool>)>
                 {
-                    ("Housekeeping", "Limpieza y tareas post checkout.", () => _settings.EnableHousekeeping, v => _settings.EnableHousekeeping = v),
-                    ("Agenda", "Vista de check-ins y check-outs.", () => _settings.EnableAgenda, v => _settings.EnableAgenda = v),
-                    ("Modo huésped simple", "Pide solo datos mínimos del huésped.", () => _settings.UseSimpleGuestMode, v => _settings.UseSimpleGuestMode = v)
+                    ("Mostrar módulo de limpieza", "Incluye tablero y tareas de housekeeping.", null, false, () => _settings.EnableHousekeeping, v => _settings.EnableHousekeeping = v),
+                    ("Mostrar agenda operativa", "Vista diaria de check-ins y check-outs.", null, false, () => _settings.EnableAgenda, v => _settings.EnableAgenda = v),
+                    ("Usar modo simple de huéspedes", "Simplifica formularios y prioriza datos mínimos.", null, false, () => _settings.UseSimpleGuestMode, v => _settings.UseSimpleGuestMode = v)
                 }),
-                ("Comercial", new List<(string, string, Func<bool>, Action<bool>)>
+                ("Comercial", new List<(string, string, string?, bool, Func<bool>, Action<bool>)>
                 {
-                    ("Cotizador", "Cotización de estadías.", () => _settings.EnableQuotes, v => _settings.EnableQuotes = v),
-                    ("Cotizaciones guardadas", "Guardar y convertir cotizaciones.", () => _settings.EnableSavedQuotes, v => _settings.EnableSavedQuotes = v),
-                    ("Promociones", "Reglas promocionales en pricing.", () => _settings.EnablePromotions, v => _settings.EnablePromotions = v),
-                    ("Tarifas avanzadas", "Rate plans, temporadas y rangos de fecha.", () => _settings.EnableAdvancedRates, v => _settings.EnableAdvancedRates = v),
-                    ("Venta directa", "Flujo de reservas públicas directas.", () => _settings.EnableDirectBooking, v => _settings.EnableDirectBooking = v)
+                    ("Mostrar cotizador", "Cotización comercial por estadía.", null, false, () => _settings.EnableQuotes, OnQuotesChanged),
+                    ("Permitir cotizaciones guardadas", "Guardar propuestas y convertir a reserva.", _settings.EnableQuotes ? null : "Requiere mantener activo el cotizador.", !_settings.EnableQuotes, () => _settings.EnableSavedQuotes, v => _settings.EnableSavedQuotes = v),
+                    ("Aplicar promociones", "Descuentos y reglas comerciales.", null, false, () => _settings.EnablePromotions, v => _settings.EnablePromotions = v),
+                    ("Usar tarifas avanzadas", "Temporadas y rangos específicos por fecha.", null, false, () => _settings.EnableAdvancedRates, v => _settings.EnableAdvancedRates = v),
+                    ("Habilitar venta directa", "Flujos públicos de reserva directa.", null, false, () => _settings.EnableDirectBooking, v => _settings.EnableDirectBooking = v)
                 }),
-                ("Finanzas", new List<(string, string, Func<bool>, Action<bool>)>
+                ("Finanzas", new List<(string, string, string?, bool, Func<bool>, Action<bool>)>
                 {
-                    ("Pagos", "Registro y consulta de pagos.", () => _settings.EnablePayments, v => _settings.EnablePayments = v)
+                    ("Permitir registrar pagos", "Módulo de cobros y saldo.", null, false, () => _settings.EnablePayments, v => _settings.EnablePayments = v)
                 }),
-                ("Distribución", new List<(string, string, Func<bool>, Action<bool>)>
+                ("Distribución", new List<(string, string, string?, bool, Func<bool>, Action<bool>)>
                 {
-                    ("Sync calendarios externos", "Conexiones y sincronización OTA.", () => _settings.EnableExternalCalendarSync, v => _settings.EnableExternalCalendarSync = v)
+                    ("Sincronizar calendarios externos", "Conexiones OTA e importación iCal.", null, false, () => _settings.EnableExternalCalendarSync, v => _settings.EnableExternalCalendarSync = v)
                 }),
-                ("Gestión", new List<(string, string, Func<bool>, Action<bool>)>
+                ("Gestión", new List<(string, string, string?, bool, Func<bool>, Action<bool>)>
                 {
-                    ("Reportes", "Paneles de ocupación e ingresos.", () => _settings.EnableReports, v => _settings.EnableReports = v),
-                    ("Plantillas", "Mensajería predefinida.", () => _settings.EnableTemplates, v => _settings.EnableTemplates = v),
-                    ("Vista de auditoría", "Acceso visual al historial de auditoría.", () => _settings.EnableAuditView, v => _settings.EnableAuditView = v)
+                    ("Mostrar reportes", "Métricas de ocupación e ingresos.", null, false, () => _settings.EnableReports, v => _settings.EnableReports = v),
+                    ("Usar plantillas", "Mensajes predefinidos para operación.", null, false, () => _settings.EnableTemplates, v => _settings.EnableTemplates = v),
+                    ("Mostrar vista de auditoría", "Consulta visual de eventos auditados.", null, false, () => _settings.EnableAuditView, v => _settings.EnableAuditView = v)
                 })
             ];
+
+    private void OnQuotesChanged(bool value)
+    {
+        if (_settings is null)
+            return;
+
+        _settings.EnableQuotes = value;
+        if (!value)
+            _settings.EnableSavedQuotes = false;
+    }
 
     private async Task Save()
     {
@@ -112,7 +126,8 @@ else
         if (res?.Success == true && res.Data is not null)
         {
             _settings = res.Data;
-            _message = "Configuración funcional actualizada.";
+            await FeatureState.RefreshAsync(PropertyId);
+            _message = "Configuración funcional actualizada. Los cambios ya fueron aplicados en la navegación y módulos del hospedaje.";
         }
         else
         {

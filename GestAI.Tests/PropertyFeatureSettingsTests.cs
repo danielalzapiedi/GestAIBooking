@@ -57,6 +57,21 @@ public class PropertyFeatureSettingsTests
         Assert.Equal("feature_disabled", result.ErrorCode);
     }
 
+    [Fact]
+    public async Task UpdateFeatureSettings_Should_Reject_SavedQuotes_Without_Quotes()
+    {
+        await using var db = CreateDbContext(nameof(UpdateFeatureSettings_Should_Reject_SavedQuotes_Without_Quotes));
+        SeedProperty(db);
+
+        var service = new PropertyFeatureService(db);
+        var handler = new PropertyFeatureSettingsHandler(db, new FakeCurrentUser(), service, new FakeAuditService());
+
+        var result = await handler.Handle(new UpdatePropertyFeatureSettingsCommand(1, true, true, false, true, true, true, true, true, true, true, true, true, false), CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid_state", result.ErrorCode);
+    }
+
     private static AppDbContext CreateDbContext(string dbName)
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()

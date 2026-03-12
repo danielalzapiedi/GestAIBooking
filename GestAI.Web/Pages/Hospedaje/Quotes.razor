@@ -2,9 +2,21 @@
 @using GestAI.Web.Dtos
 @inject ApiClient Api
 @inject NavigationManager Nav
+@inject GestAI.Web.Service.PropertyFeatureState FeatureState
 
 <PageTitle>Cotizador</PageTitle>
 
+@if (!_featureChecked)
+{
+    <EmptyState Title="Cargando configuración" Description="Estamos validando las funciones habilitadas para este hospedaje." Icon="bi-hourglass-split" />
+}
+else if (!_quotesEnabled)
+{
+    <EmptyState Title="Funcionalidad desactivada" Description="El cotizador está desactivado para este hospedaje." Icon="bi-toggle-off" />
+    <button class="btn btn-outline-primary" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>Ir al dashboard</button>
+}
+else
+{
 <div class="pagetitle d-flex justify-content-between align-items-center">
     <div>
         <h1>Cotizador comercial</h1>
@@ -182,6 +194,8 @@
 
 @code {
     [Parameter] public int PropertyId { get; set; }
+    private bool _featureChecked;
+    private bool _quotesEnabled = true;
     private DateOnly _checkIn = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
     private DateOnly _checkOut = DateOnly.FromDateTime(DateTime.Today.AddDays(3));
     private int _adults = 2;
@@ -198,6 +212,12 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        var settings = await FeatureState.EnsureAsync(PropertyId);
+        _quotesEnabled = settings?.EnableQuotes ?? true;
+        _featureChecked = true;
+        if (!_quotesEnabled)
+            return;
+
         _units = (await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units"))?.Data ?? new();
     }
 

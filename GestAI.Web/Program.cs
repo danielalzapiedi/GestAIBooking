@@ -33,6 +33,7 @@ builder.Services.AddScoped<AuthenticationStateProvider>(sp => sp.GetRequiredServ
 
 builder.Services.AddScoped<LocalStorageService>(); // si lo usás en otras cosas
 builder.Services.AddSingleton<AppState>();
+builder.Services.AddScoped<PropertyFeatureState>();
 
 // ------------------------------------------------------------
 // Handlers (solo para BackendApi)

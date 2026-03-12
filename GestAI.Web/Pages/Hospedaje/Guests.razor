@@ -1,5 +1,6 @@
 @page "/guests/{PropertyId:int}"
 @inject ApiClient Api
+@inject GestAI.Web.Service.PropertyFeatureState FeatureState
 @using GestAI.Web.Dtos
 
 <div class="pagetitle">
@@ -138,8 +139,8 @@ else
     private async Task Load()
     {
         _loaded = false;
-        var featureRes = await Api.GetAsync<AppResult<PropertyFeatureSettingsDto>>($"api/properties/{PropertyId}/feature-settings");
-        _simpleGuestMode = featureRes?.Data?.UseSimpleGuestMode == true;
+        var settings = await FeatureState.EnsureAsync(PropertyId);
+        _simpleGuestMode = settings?.UseSimpleGuestMode == true;
         var res = await Api.GetAsync<AppResult<List<GuestDto>>>($"api/properties/{PropertyId}/guests?search={Uri.EscapeDataString(_search)}");
         _guests = res?.Data;
         _loaded = true;

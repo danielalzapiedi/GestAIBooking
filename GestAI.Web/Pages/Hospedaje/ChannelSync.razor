@@ -2,9 +2,21 @@
 @inject ApiClient Api
 @inject IJSRuntime JS
 @inject NavigationManager Nav
+@inject GestAI.Web.Service.PropertyFeatureState FeatureState
 
 <PageTitleShared Title="Sincronización de canales" Subtitle="Importá calendarios ICS de Booking/Airbnb y exportá la disponibilidad de cada unidad." />
 
+@if (!_featureChecked)
+{
+    <EmptyState Title="Cargando configuración" Description="Estamos validando las funciones habilitadas para este hospedaje." Icon="bi-hourglass-split" />
+}
+else if (!_syncEnabled)
+{
+    <EmptyState Title="Funcionalidad desactivada" Description="La sincronización externa está desactivada para este hospedaje." Icon="bi-toggle-off" />
+    <button class="btn btn-outline-primary" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>Ir al dashboard</button>
+}
+else
+{
 <div class="row g-3">
     <div class="col-lg-5">
         <div class="card">
@@ -165,9 +177,12 @@
         </div>
     </div>
 </div>
+}
 
 @code {
     [Parameter] public int PropertyId { get; set; }
+    private bool _featureChecked;
+    private bool _syncEnabled = true;
     private List<UnitListItemDto> _units = new();
     private List<ExternalCalendarConnectionDto> _connections = new();
     private List<ExternalSyncLogDto> _logs = new();
@@ -182,7 +197,14 @@
     private string? _message;
     private bool _success;
 
-    protected override async Task OnParametersSetAsync() => await Load();
+    protected override async Task OnParametersSetAsync()
+    {
+        var settings = await FeatureState.EnsureAsync(PropertyId);
+        _syncEnabled = settings?.EnableExternalCalendarSync ?? true;
+        _featureChecked = true;
+        if (_syncEnabled)
+            await Load();
+    }
 
     private async Task Load()
     {

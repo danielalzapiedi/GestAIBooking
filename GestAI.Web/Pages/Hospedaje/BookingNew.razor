@@ -1,6 +1,7 @@
 @page "/bookings/new/{PropertyId:int}"
 @inject ApiClient Api
 @inject NavigationManager Nav
+@inject GestAI.Web.Service.PropertyFeatureState FeatureState
 @using GestAI.Web.Dtos
 
 <div class="pagetitle">
@@ -167,10 +168,13 @@ else
                             <label class="form-label">Teléfono</label>
                             <input class="form-control" @bind="_quickGuestPhone" />
                         </div>
-                        <div class="col-12 col-md-6">
-                            <label class="form-label">Email</label>
-                            <input class="form-control" @bind="_quickGuestEmail" />
-                        </div>
+                        @if (!_simpleGuestMode)
+                        {
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">Email</label>
+                                <input class="form-control" @bind="_quickGuestEmail" />
+                            </div>
+                        }
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -223,9 +227,13 @@ else
     private string _quickGuestFullName = "";
     private string? _quickGuestPhone;
     private string? _quickGuestEmail;
+    private bool _simpleGuestMode;
 
     protected override async Task OnParametersSetAsync()
     {
+        var settings = await FeatureState.EnsureAsync(PropertyId);
+        _simpleGuestMode = settings?.UseSimpleGuestMode == true;
+
         var uRes = await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units");
         _units = uRes?.Data ?? new();
         _unitId = UnitId ?? _units.FirstOrDefault()?.Id ?? 0;
@@ -326,7 +334,7 @@ else
     {
         _guestError = null;
         if (string.IsNullOrWhiteSpace(_quickGuestFullName)) { _guestError = "El nombre es obligatorio."; return; }
-        var cmd = new UpsertGuestCommand(PropertyId, null, _quickGuestFullName, _quickGuestPhone, _quickGuestEmail, null, null, null);
+        var cmd = new UpsertGuestCommand(PropertyId, null, _quickGuestFullName, _quickGuestPhone, _simpleGuestMode ? null : _quickGuestEmail, null, null, null);
         var res = await Api.PostJsonAsync<AppResult<int>, UpsertGuestCommand>($"api/properties/{PropertyId}/guests", cmd);
         if (res?.Success != true || res.Data <= 0) { _guestError = res?.Message ?? "No se pudo crear el huésped."; return; }
         _guestId = res.Data; _guestSelectedName = _quickGuestFullName; _guestQuery = _quickGuestFullName; _guestModalOpen = false;

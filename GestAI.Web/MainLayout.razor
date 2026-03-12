@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@implements IDisposable
 @inject ApiClient Api
 @using Microsoft.AspNetCore.Components.Authorization
 @inject AuthenticationStateProvider AuthProvider
@@ -6,6 +7,7 @@
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 @inject ITokenStore TokenStore
+@inject GestAI.Web.Service.PropertyFeatureState FeatureState
 @using System.Security.Claims
 @using GestAI.Web.Dtos
 
@@ -132,6 +134,8 @@
                     </li>
                 }
 
+                @if (ShowOperationGroup)
+                {
                 <li class="sidebar-section-label">Operación</li>
                 <li class="nav-item app-sidebar-group">
                     <button type="button" class="nav-link sidebar-group-toggle @(IsGroupOpen("operacion") ? "" : "collapsed")" @onclick='() => ToggleGroup("operacion")'>
@@ -154,7 +158,10 @@
                         <li><NavLink class="sidebar-sub-link" href="@GuestsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-people"></i><span>Huéspedes</span></NavLink></li>
                     </ul>
                 </li>
+                }
 
+                @if (ShowCommercialGroup)
+                {
                 <li class="sidebar-section-label">Comercial</li>
                 <li class="nav-item app-sidebar-group">
                     <button type="button" class="nav-link sidebar-group-toggle @(IsGroupOpen("comercial") ? "" : "collapsed")" @onclick='() => ToggleGroup("comercial")'>
@@ -185,7 +192,10 @@
                         }
                     </ul>
                 </li>
+                }
 
+                @if (ShowManagementGroup)
+                {
                 <li class="sidebar-section-label">Gestión</li>
                 <li class="nav-item app-sidebar-group">
                     <button type="button" class="nav-link sidebar-group-toggle @(IsGroupOpen("gestion") ? "" : "collapsed")" @onclick='() => ToggleGroup("gestion")'>
@@ -206,7 +216,10 @@
                         }
                     </ul>
                 </li>
+                }
 
+                @if (ShowAccountGroup)
+                {
                 <li class="sidebar-section-label">Cuenta</li>
                 <li class="nav-item app-sidebar-group">
                     <button type="button" class="nav-link sidebar-group-toggle @(IsGroupOpen("cuenta") ? "" : "collapsed")" @onclick='() => ToggleGroup("cuenta")'>
@@ -225,6 +238,7 @@
                         }
                     </ul>
                 </li>
+                }
             </ul>
         </aside>
 
@@ -312,6 +326,8 @@
             InvokeAsync(StateHasChanged);
         };
 
+        FeatureState.FeaturesChanged += OnFeaturesChanged;
+
         Navigation.LocationChanged += (_, __) =>
         {
             _ = InvokeAsync(async () =>
@@ -391,7 +407,7 @@
         }
 
         _defaultPropertyId = propertyId;
-        await LoadFeatureSettings();
+        _featureSettings = await FeatureState.RefreshAsync(propertyId);
         Navigation.NavigateTo($"/dashboard/{propertyId}", forceLoad: false);
         SyncMenuFromUrl();
         StateHasChanged();
@@ -472,8 +488,19 @@
             return;
         }
 
-        var res = await Api.GetAsync<AppResult<PropertyFeatureSettingsDto>>($"api/properties/{_defaultPropertyId}/feature-settings");
-        _featureSettings = res?.Success == true ? res.Data : null;
+        _featureSettings = await FeatureState.EnsureAsync(_defaultPropertyId.Value);
+    }
+
+    private void OnFeaturesChanged()
+    {
+        if (_defaultPropertyId is null)
+            return;
+
+        if (FeatureState.CurrentPropertyId == _defaultPropertyId)
+        {
+            _featureSettings = FeatureState.Current;
+            _ = InvokeAsync(StateHasChanged);
+        }
     }
 
     private bool IsFeatureEnabled(Func<PropertyFeatureSettingsDto, bool> selector)
@@ -501,4 +528,23 @@
     }
 
     private void DismissToast(string toast) => _toasts.Remove(toast);
+
+    private bool ShowOperationGroup => true;
+
+    private bool ShowCommercialGroup =>
+        IsFeatureEnabled(x => x.EnableQuotes)
+        || IsFeatureEnabled(x => x.EnableSavedQuotes)
+        || IsFeatureEnabled(x => x.EnableAdvancedRates)
+        || IsFeatureEnabled(x => x.EnablePromotions)
+        || IsFeatureEnabled(x => x.EnableTemplates);
+
+    private bool ShowManagementGroup =>
+        true;
+
+    private bool ShowAccountGroup => HasModule(SaasModule.Users) || HasModule(SaasModule.Configuration);
+
+    public void Dispose()
+    {
+        FeatureState.FeaturesChanged -= OnFeaturesChanged;
+    }
 }

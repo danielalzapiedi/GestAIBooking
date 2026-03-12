@@ -2,8 +2,20 @@
 @using GestAI.Web.Dtos
 @inject ApiClient Api
 @inject NavigationManager Nav
+@inject GestAI.Web.Service.PropertyFeatureState FeatureState
 
 <PageTitle>Housekeeping</PageTitle>
+@if (!_featureChecked)
+{
+    <EmptyState Title="Cargando configuración" Description="Estamos validando las funciones habilitadas para este hospedaje." Icon="bi-hourglass-split" />
+}
+else if (!_housekeepingEnabled)
+{
+    <EmptyState Title="Funcionalidad desactivada" Description="Housekeeping está desactivado para este hospedaje." Icon="bi-toggle-off" />
+    <button class="btn btn-outline-primary" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>Ir al dashboard</button>
+}
+else
+{
 <h1 class="h3 mb-3">Housekeeping / Limpieza</h1>
 
 @if (_tasks is null)
@@ -35,11 +47,21 @@ else
         </div>
     </div>
 }
+}
 
 @code {
     [Parameter] public int PropertyId { get; set; }
     private List<OperationalTaskDto>? _tasks; private List<UnitListItemDto> _units = new();
-    protected override async Task OnParametersSetAsync() => await Load();
+    private bool _featureChecked;
+    private bool _housekeepingEnabled = true;
+    protected override async Task OnParametersSetAsync()
+    {
+        var settings = await FeatureState.EnsureAsync(PropertyId);
+        _housekeepingEnabled = settings?.EnableHousekeeping ?? true;
+        _featureChecked = true;
+        if (_housekeepingEnabled)
+            await Load();
+    }
     private async Task Load(){ _tasks = (await Api.GetAsync<AppResult<List<OperationalTaskDto>>>($"api/properties/{PropertyId}/operations/tasks?status={OperationalTaskStatus.Pending}&type={OperationalTaskType.Cleaning}"))?.Data ?? new(); _units = (await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units"))?.Data ?? new(); }
     private async Task Complete(int taskId){ await Api.PostJsonAsync<AppResult, object>($"api/properties/{PropertyId}/operations/tasks/{taskId}/complete", new { }); await Load(); }
     private void OpenBooking(int? bookingId){ if (bookingId.HasValue) Nav.NavigateTo($"/bookings/{PropertyId}/{bookingId.Value}"); }

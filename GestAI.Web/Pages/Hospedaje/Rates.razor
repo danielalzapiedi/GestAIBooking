@@ -2,9 +2,21 @@
 @using GestAI.Web.Dtos
 @inject ApiClient Api
 @inject NavigationManager Nav
+@inject GestAI.Web.Service.PropertyFeatureState FeatureState
 
 <PageTitle>Tarifas</PageTitle>
 
+@if (!_featureChecked)
+{
+    <EmptyState Title="Cargando configuración" Description="Estamos validando las funciones habilitadas para este hospedaje." Icon="bi-hourglass-split" />
+}
+else if (!_advancedRatesEnabled)
+{
+    <EmptyState Title="Funcionalidad desactivada" Description="Las tarifas avanzadas están desactivadas para este hospedaje." Icon="bi-toggle-off" />
+    <button class="btn btn-outline-primary" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>Ir al dashboard</button>
+}
+else
+{
 <div class="pagetitle d-flex justify-content-between align-items-center">
     <div>
         <h1>Tarifas</h1>
@@ -74,8 +86,12 @@
     </div>
 </div>
 
+}
+
 @code {
     [Parameter] public int PropertyId { get; set; }
+    private bool _featureChecked;
+    private bool _advancedRatesEnabled = true;
     private bool _loaded;
     private List<RatePlanDto> _rates = new();
     private List<UnitListItemDto> _units = new();
@@ -90,6 +106,12 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        var settings = await FeatureState.EnsureAsync(PropertyId);
+        _advancedRatesEnabled = settings?.EnableAdvancedRates ?? true;
+        _featureChecked = true;
+        if (!_advancedRatesEnabled)
+            return;
+
         _loaded = false;
         _rates = (await Api.GetAsync<AppResult<List<RatePlanDto>>>($"api/properties/{PropertyId}/rates"))?.Data ?? new();
         _units = (await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units"))?.Data ?? new();

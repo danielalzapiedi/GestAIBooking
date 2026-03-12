@@ -1,7 +1,20 @@
 @page "/templates/{PropertyId:int}"
 @using GestAI.Web.Dtos
 @inject ApiClient Api
+@inject NavigationManager Nav
+@inject GestAI.Web.Service.PropertyFeatureState FeatureState
 <PageTitle>Templates</PageTitle>
+@if (!_featureChecked)
+{
+    <EmptyState Title="Cargando configuración" Description="Estamos validando las funciones habilitadas para este hospedaje." Icon="bi-hourglass-split" />
+}
+else if (!_templatesEnabled)
+{
+    <EmptyState Title="Funcionalidad desactivada" Description="Las plantillas están desactivadas para este hospedaje." Icon="bi-toggle-off" />
+    <button class="btn btn-outline-primary" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>Ir al dashboard</button>
+}
+else
+{
 <h1 class="h3 mb-3">Plantillas</h1>
 @if (_templates is null) { <p>Cargando...</p> } else {
 <div class="row g-3">
@@ -11,8 +24,18 @@
 }
 </div>
 }
+}
 @code {
 [Parameter] public int PropertyId { get; set; }
 private List<MessageTemplateDto>? _templates;
-protected override async Task OnParametersSetAsync() => _templates = (await Api.GetAsync<AppResult<List<MessageTemplateDto>>>($"api/properties/{PropertyId}/templates"))?.Data ?? new();
+private bool _featureChecked;
+private bool _templatesEnabled = true;
+protected override async Task OnParametersSetAsync()
+{
+    var settings = await FeatureState.EnsureAsync(PropertyId);
+    _templatesEnabled = settings?.EnableTemplates ?? true;
+    _featureChecked = true;
+    if (_templatesEnabled)
+        _templates = (await Api.GetAsync<AppResult<List<MessageTemplateDto>>>($"api/properties/{PropertyId}/templates"))?.Data ?? new();
+}
 }
