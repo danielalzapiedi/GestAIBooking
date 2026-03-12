@@ -6,6 +6,7 @@ using GestAI.Domain.Entities;
 using GestAI.Domain.Enums;
 using GestAI.Infrastructure.Calendars;
 using GestAI.Infrastructure.Persistence;
+using GestAI.Infrastructure.Saas;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -19,7 +20,8 @@ public class ExternalCalendarTests
         await using var db = CreateDbContext(nameof(Quote_Should_Not_Return_Unit_When_External_Event_Overlaps));
         SeedAvailabilityScenario(db);
 
-        var handler = new GetQuoteQueryHandler(db, new FakeCurrentUser());
+        var features = new PropertyFeatureService(db);
+        var handler = new GetQuoteQueryHandler(db, new FakeCurrentUser(), features);
         var result = await handler.Handle(new GetQuoteQuery(1, 1, new DateOnly(2026, 3, 10), new DateOnly(2026, 3, 12), 2, 0), CancellationToken.None);
 
         Assert.True(result.Success);
@@ -34,7 +36,8 @@ public class ExternalCalendarTests
         db.Guests.Add(new Guest { Id = 10, PropertyId = 1, Property = db.Properties.First(), FullName = "Guest" , IsActive = true});
         await db.SaveChangesAsync();
 
-        var handler = new UpsertBookingCommandHandler(db, new FakeCurrentUser());
+        var features = new PropertyFeatureService(db);
+        var handler = new UpsertBookingCommandHandler(db, new FakeCurrentUser(), features);
         var result = await handler.Handle(new UpsertBookingCommand(1, null, 1, 10, new DateOnly(2026, 3, 10), new DateOnly(2026, 3, 12), 2, 0, 100m, null), CancellationToken.None);
 
         Assert.False(result.Success);
