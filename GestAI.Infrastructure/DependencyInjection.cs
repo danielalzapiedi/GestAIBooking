@@ -21,6 +21,7 @@ public static class DependencyInjection
         services.AddScoped<IQuoteSuggestionService, MockQuoteSuggestionService>();
         services.AddHttpClient<IIcsCalendarService, IcsCalendarService>();
         services.AddScoped<IExternalCalendarSyncService, ExternalCalendarSyncService>();
+        services.Configure<ExternalCalendarAutoSyncOptions>(config.GetSection(ExternalCalendarAutoSyncOptions.SectionName));
 
         services.AddAuthentication(options =>
         {

@@ -46,7 +46,7 @@
                     <div class="col-6">
                         <div class="form-check mt-2">
                             <input id="sync-auto" type="checkbox" class="form-check-input" @bind="_formAutoSync" />
-                            <label class="form-check-label" for="sync-auto">Auto sync preparado</label>
+                            <label class="form-check-label" for="sync-auto">Auto sync habilitado para esta conexión</label>
                         </div>
                     </div>
                     <div class="col-12 d-flex gap-2">
@@ -54,6 +54,8 @@
                         <button class="btn btn-outline-secondary" @onclick="ResetForm">Limpiar</button>
                     </div>
                 </div>
+                <div class="alert alert-info mt-3 mb-0">La sincronización automática requiere que la configuración global <code>ExternalCalendarAutoSync:Enabled</code> esté activa en la API.</div>
+
                 @if (!string.IsNullOrWhiteSpace(_message))
                 {
                     <div class="alert @(_success ? "alert-success" : "alert-danger") mt-3 mb-0">@_message</div>
