@@ -23,15 +23,20 @@ public sealed class DeletePaymentCommandHandler : IRequestHandler<DeletePaymentC
 {
     private readonly IAppDbContext _db;
     private readonly ICurrentUser _current;
+    private readonly IPropertyFeatureService _features;
 
-    public DeletePaymentCommandHandler(IAppDbContext db, ICurrentUser current)
+    public DeletePaymentCommandHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features)
     {
         _db = db;
         _current = current;
+        _features = features;
     }
 
     public async Task<AppResult> Handle(DeletePaymentCommand request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Payments, ct))
+            return AppResult.Fail("feature_disabled", "La gestión de pagos está desactivada para este hospedaje.");
+
         var payment = await _db.Payments
             .FirstOrDefaultAsync(p => p.PropertyId == request.PropertyId && p.Id == request.PaymentId && p.Property.Account.OwnerUserId == _current.UserId, ct);
 

@@ -41,10 +41,13 @@ public sealed class UpsertRatePlanCommandValidator : AbstractValidator<UpsertRat
 
 public sealed class UpsertRatePlanCommandHandler : IRequestHandler<UpsertRatePlanCommand, AppResult<int>>
 {
-    private readonly IAppDbContext _db; private readonly ICurrentUser _current;
-    public UpsertRatePlanCommandHandler(IAppDbContext db, ICurrentUser current) { _db = db; _current = current; }
+    private readonly IAppDbContext _db; private readonly ICurrentUser _current; private readonly IPropertyFeatureService _features;
+    public UpsertRatePlanCommandHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features) { _db = db; _current = current; _features = features; }
     public async Task<AppResult<int>> Handle(UpsertRatePlanCommand request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.AdvancedRates, ct))
+            return AppResult<int>.Fail("feature_disabled", "Las tarifas avanzadas están desactivadas para este hospedaje.");
+
         var unit = await _db.Units.AsNoTracking()
             .Include(x => x.Property)
             .FirstOrDefaultAsync(x => x.Id == request.UnitId && x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)), ct);

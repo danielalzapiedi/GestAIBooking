@@ -1,5 +1,6 @@
 using GestAI.Application.Abstractions;
 using GestAI.Application.Common;
+using GestAI.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,10 +10,13 @@ public sealed record GetRatesQuery(int PropertyId) : IRequest<AppResult<List<Rat
 
 public sealed class GetRatesQueryHandler : IRequestHandler<GetRatesQuery, AppResult<List<RatePlanDto>>>
 {
-    private readonly IAppDbContext _db; private readonly ICurrentUser _current;
-    public GetRatesQueryHandler(IAppDbContext db, ICurrentUser current) { _db = db; _current = current; }
+    private readonly IAppDbContext _db; private readonly ICurrentUser _current; private readonly IPropertyFeatureService _features;
+    public GetRatesQueryHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features) { _db = db; _current = current; _features = features; }
     public async Task<AppResult<List<RatePlanDto>>> Handle(GetRatesQuery request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.AdvancedRates, ct))
+            return AppResult<List<RatePlanDto>>.Fail("feature_disabled", "Las tarifas avanzadas están desactivadas para este hospedaje.");
+
         var plans = await _db.RatePlans.AsNoTracking().Where(x => x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)))
             .Include(x => x.SeasonalRates).Include(x => x.DateRangeRates).Include(x => x.Unit)
             .OrderBy(x => x.Unit.DisplayOrder).ThenBy(x => x.Name)

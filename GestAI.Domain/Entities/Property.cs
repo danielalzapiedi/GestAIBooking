@@ -30,6 +30,7 @@ public sealed class Property : Entity
     public string? CommercialContactEmail { get; set; }
     public string? PublicSlug { get; set; }
     public string? PublicDescription { get; set; }
+    public PropertyFeatureSettings FeatureSettings { get; set; } = null!;
     public ICollection<Unit> Units { get; set; } = new List<Unit>();
     public ICollection<MessageTemplate> MessageTemplates { get; set; } = new List<MessageTemplate>();
     public ICollection<Promotion> Promotions { get; set; } = new List<Promotion>();

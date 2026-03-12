@@ -32,15 +32,20 @@ public sealed class GetQuoteQueryHandler :
 {
     private readonly IAppDbContext _db;
     private readonly ICurrentUser _current;
+    private readonly IPropertyFeatureService _features;
 
-    public GetQuoteQueryHandler(IAppDbContext db, ICurrentUser current)
+    public GetQuoteQueryHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features)
     {
         _db = db;
         _current = current;
+        _features = features;
     }
 
     public async Task<AppResult<QuoteResultDto>> Handle(GetQuoteQuery request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Quotes, ct))
+            return AppResult<QuoteResultDto>.Fail("feature_disabled", "El cotizador está desactivado para este hospedaje.");
+
         var property = await _db.Properties.AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == request.PropertyId && (p.Account.OwnerUserId == _current.UserId || p.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)), ct);
         if (property is null)
@@ -125,6 +130,9 @@ public sealed class GetQuoteQueryHandler :
 
     public async Task<AppResult<SavedQuoteDto>> Handle(SaveQuoteCommand request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.SavedQuotes, ct))
+            return AppResult<SavedQuoteDto>.Fail("feature_disabled", "Las cotizaciones guardadas están desactivadas para este hospedaje.");
+
         var quote = await Handle(new GetQuoteQuery(request.PropertyId, request.UnitId, request.CheckInDate, request.CheckOutDate, request.Adults, request.Children), ct);
         var selected = request.UnitId.HasValue
             ? quote.Data?.AvailableUnits.FirstOrDefault(x => x.UnitId == request.UnitId.Value)
@@ -161,6 +169,9 @@ public sealed class GetQuoteQueryHandler :
 
     public async Task<AppResult<List<SavedQuoteDto>>> Handle(GetSavedQuotesQuery request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.SavedQuotes, ct))
+            return AppResult<List<SavedQuoteDto>>.Fail("feature_disabled", "Las cotizaciones guardadas están desactivadas para este hospedaje.");
+
         var query = _db.SavedQuotes.AsNoTracking()
             .Where(x => x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)))
             .Include(x => x.Unit)
@@ -201,6 +212,9 @@ public sealed class GetQuoteQueryHandler :
 
     public async Task<AppResult<SavedQuoteDto>> Handle(GetSavedQuoteDetailQuery request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.SavedQuotes, ct))
+            return AppResult<SavedQuoteDto>.Fail("feature_disabled", "Las cotizaciones guardadas están desactivadas para este hospedaje.");
+
         var entity = await _db.SavedQuotes.AsNoTracking()
             .Include(x => x.Unit)
             .FirstOrDefaultAsync(x => x.Id == request.SavedQuoteId && x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)), ct);
@@ -212,6 +226,9 @@ public sealed class GetQuoteQueryHandler :
 
     public async Task<AppResult<int>> Handle(ConvertSavedQuoteToBookingCommand request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.SavedQuotes, ct))
+            return AppResult<int>.Fail("feature_disabled", "Las cotizaciones guardadas están desactivadas para este hospedaje.");
+
         var quote = await _db.SavedQuotes.FirstOrDefaultAsync(x => x.Id == request.SavedQuoteId && x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)), ct);
         if (quote is null)
             return AppResult<int>.Fail("not_found", "Cotización guardada no encontrada.");
@@ -286,6 +303,9 @@ public sealed class GetQuoteQueryHandler :
 
     public async Task<AppResult<PricingSimulationDto>> Handle(PricingSimulationQuery request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Quotes, ct))
+            return AppResult<PricingSimulationDto>.Fail("feature_disabled", "El cotizador está desactivado para este hospedaje.");
+
         var unitName = await _db.Units.AsNoTracking()
             .Where(x => x.Id == request.UnitId && x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)))
             .Select(x => x.Name)

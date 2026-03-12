@@ -61,6 +61,7 @@ builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddScoped<IUserAccessService, GestAI.Infrastructure.Saas.UserAccessService>();
 builder.Services.AddScoped<ISaasPlanService, GestAI.Infrastructure.Saas.SaasPlanService>();
 builder.Services.AddScoped<IAuditService, GestAI.Infrastructure.Saas.AuditService>();
+builder.Services.AddScoped<IPropertyFeatureService, GestAI.Infrastructure.Saas.PropertyFeatureService>();
 
 var app = builder.Build();
 

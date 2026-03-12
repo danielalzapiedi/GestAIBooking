@@ -33,15 +33,20 @@ public sealed class CreatePaymentCommandHandler : IRequestHandler<CreatePaymentC
 {
     private readonly IAppDbContext _db;
     private readonly ICurrentUser _current;
+    private readonly IPropertyFeatureService _features;
 
-    public CreatePaymentCommandHandler(IAppDbContext db, ICurrentUser current)
+    public CreatePaymentCommandHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features)
     {
         _db = db;
         _current = current;
+        _features = features;
     }
 
     public async Task<AppResult<int>> Handle(CreatePaymentCommand request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Payments, ct))
+            return AppResult<int>.Fail("feature_disabled", "La gestión de pagos está desactivada para este hospedaje.");
+
         var booking = await _db.Bookings
             .FirstOrDefaultAsync(b => b.Id == request.BookingId && b.PropertyId == request.PropertyId && (b.Property.Account.OwnerUserId == _current.UserId || b.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)), ct);
 

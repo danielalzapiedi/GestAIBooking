@@ -37,12 +37,18 @@ public static class CommercialPricing
             rules.Add($"La ocupación solicitada supera la capacidad de la unidad {unit.Name}.");
         }
 
-        var ratePlan = await db.RatePlans.AsNoTracking()
-            .Include(x => x.SeasonalRates)
-            .Include(x => x.DateRangeRates)
-            .Where(x => x.PropertyId == propertyId && x.UnitId == unitId && x.IsActive)
-            .OrderByDescending(x => x.Id)
-            .FirstOrDefaultAsync(ct);
+        var featureSettings = await db.PropertyFeatureSettings.AsNoTracking().FirstOrDefaultAsync(x => x.PropertyId == propertyId, ct);
+        var enableAdvancedRates = featureSettings?.EnableAdvancedRates ?? true;
+        var enablePromotions = featureSettings?.EnablePromotions ?? true;
+
+        var ratePlan = enableAdvancedRates
+            ? await db.RatePlans.AsNoTracking()
+                .Include(x => x.SeasonalRates)
+                .Include(x => x.DateRangeRates)
+                .Where(x => x.PropertyId == propertyId && x.UnitId == unitId && x.IsActive)
+                .OrderByDescending(x => x.Id)
+                .FirstOrDefaultAsync(ct)
+            : null;
 
         decimal baseAmount = 0m;
         for (var date = checkIn; date < checkOut; date = date.AddDays(1))
@@ -81,16 +87,18 @@ public static class CommercialPricing
 
         lines.Add(new PricingLineDto("Tarifa base calculada", Math.Round(baseAmount, 2), "base"));
 
-        var promos = await db.Promotions.AsNoTracking()
-            .Where(x => x.PropertyId == propertyId
-                && x.IsActive
-                && !x.IsDeleted
-                && (x.UnitId == null || x.UnitId == unitId)
-                && x.DateFrom <= checkIn
-                && checkOut <= x.DateTo)
-            .OrderBy(x => x.Priority)
-            .ThenBy(x => x.IsCumulative)
-            .ToListAsync(ct);
+        var promos = enablePromotions
+            ? await db.Promotions.AsNoTracking()
+                .Where(x => x.PropertyId == propertyId
+                    && x.IsActive
+                    && !x.IsDeleted
+                    && (x.UnitId == null || x.UnitId == unitId)
+                    && x.DateFrom <= checkIn
+                    && checkOut <= x.DateTo)
+                .OrderBy(x => x.Priority)
+                .ThenBy(x => x.IsCumulative)
+                .ToListAsync(ct)
+            : [];
 
         var validationRules = ValidatePromotionsAndRules(promos, checkIn, checkOut, DateOnly.FromDateTime(DateTime.UtcNow.Date));
         rules.AddRange(validationRules);

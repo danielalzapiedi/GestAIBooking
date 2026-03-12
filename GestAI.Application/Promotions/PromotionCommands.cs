@@ -2,6 +2,7 @@ using FluentValidation;
 using GestAI.Application.Abstractions;
 using GestAI.Application.Common;
 using GestAI.Domain.Entities;
+using GestAI.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -27,15 +28,20 @@ public sealed class PromotionCommandsHandler :
 {
     private readonly IAppDbContext _db;
     private readonly ICurrentUser _current;
+    private readonly IPropertyFeatureService _features;
 
-    public PromotionCommandsHandler(IAppDbContext db, ICurrentUser current)
+    public PromotionCommandsHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features)
     {
         _db = db;
         _current = current;
+        _features = features;
     }
 
     public async Task<AppResult<int>> Handle(UpsertPromotionCommand request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Promotions, ct))
+            return AppResult<int>.Fail("feature_disabled", "Las promociones están desactivadas para este hospedaje.");
+
         var property = await _db.Properties.AsNoTracking().FirstOrDefaultAsync(x => x.Id == request.PropertyId && (x.Account.OwnerUserId == _current.UserId || x.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)), ct);
         if (property is null)
             return AppResult<int>.Fail("forbidden", "Hospedaje inválido.");
@@ -88,6 +94,9 @@ public sealed class PromotionCommandsHandler :
 
     public async Task<AppResult> Handle(TogglePromotionStatusCommand request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Promotions, ct))
+            return AppResult.Fail("feature_disabled", "Las promociones están desactivadas para este hospedaje.");
+
         var entity = await _db.Promotions.FirstOrDefaultAsync(x => x.Id == request.PromotionId && x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)), ct);
         if (entity is null)
             return AppResult.Fail("not_found", "Promoción no encontrada.");
@@ -98,6 +107,9 @@ public sealed class PromotionCommandsHandler :
 
     public async Task<AppResult> Handle(DeletePromotionCommand request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Promotions, ct))
+            return AppResult.Fail("feature_disabled", "Las promociones están desactivadas para este hospedaje.");
+
         var entity = await _db.Promotions.FirstOrDefaultAsync(x => x.Id == request.PromotionId && x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)), ct);
         if (entity is null)
             return AppResult.Fail("not_found", "Promoción no encontrada.");
@@ -109,6 +121,9 @@ public sealed class PromotionCommandsHandler :
 
     public async Task<AppResult<List<PromotionDto>>> Handle(GetPromotionsQuery request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Promotions, ct))
+            return AppResult<List<PromotionDto>>.Fail("feature_disabled", "Las promociones están desactivadas para este hospedaje.");
+
         var data = await _db.Promotions.AsNoTracking()
             .Where(x => x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)) && (request.IncludeDeleted || !x.IsDeleted))
             .Include(x => x.Unit)

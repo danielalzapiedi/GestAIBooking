@@ -12,15 +12,20 @@ public sealed class GetOperationalTasksQueryHandler : IRequestHandler<GetOperati
 {
     private readonly IAppDbContext _db;
     private readonly ICurrentUser _current;
+    private readonly IPropertyFeatureService _features;
 
-    public GetOperationalTasksQueryHandler(IAppDbContext db, ICurrentUser current)
+    public GetOperationalTasksQueryHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features)
     {
         _db = db;
         _current = current;
+        _features = features;
     }
 
     public async Task<AppResult<List<OperationalTaskDto>>> Handle(GetOperationalTasksQuery request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Housekeeping, ct))
+            return AppResult<List<OperationalTaskDto>>.Fail("feature_disabled", "Housekeeping está desactivado para este hospedaje.");
+
         var query = _db.OperationalTasks.AsNoTracking()
             .Where(x => x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)));
 

@@ -143,8 +143,14 @@
                         <li><NavLink class="sidebar-sub-link" href="@DashboardHref" Match="NavLinkMatch.Prefix"><i class="bi bi-grid"></i><span>Dashboard</span></NavLink></li>
                         <li><NavLink class="sidebar-sub-link" href="@CalendarTimelineHref" Match="NavLinkMatch.Prefix"><i class="bi bi-calendar3"></i><span>Calendario</span></NavLink></li>
                         <li><NavLink class="sidebar-sub-link" href="@BookingsListHref" Match="NavLinkMatch.Prefix"><i class="bi bi-journal-bookmark"></i><span>Reservas</span></NavLink></li>
-                        <li><NavLink class="sidebar-sub-link" href="@AgendaHref" Match="NavLinkMatch.Prefix"><i class="bi bi-clock-history"></i><span>Agenda</span></NavLink></li>
-                        <li><NavLink class="sidebar-sub-link" href="@HousekeepingHref" Match="NavLinkMatch.Prefix"><i class="bi bi-brush"></i><span>Limpieza</span></NavLink></li>
+                        @if (IsFeatureEnabled(x => x.EnableAgenda))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@AgendaHref" Match="NavLinkMatch.Prefix"><i class="bi bi-clock-history"></i><span>Agenda</span></NavLink></li>
+                        }
+                        @if (IsFeatureEnabled(x => x.EnableHousekeeping))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@HousekeepingHref" Match="NavLinkMatch.Prefix"><i class="bi bi-brush"></i><span>Limpieza</span></NavLink></li>
+                        }
                         <li><NavLink class="sidebar-sub-link" href="@GuestsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-people"></i><span>Huéspedes</span></NavLink></li>
                     </ul>
                 </li>
@@ -157,11 +163,26 @@
                         <i class="bi bi-chevron-down ms-auto"></i>
                     </button>
                     <ul class="nav-content collapse @(IsGroupOpen("comercial") ? "show" : "")">
-                        <li><NavLink class="sidebar-sub-link" href="@QuotesHref" Match="NavLinkMatch.All"><i class="bi bi-calculator"></i><span>Cotizador</span></NavLink></li>
-                        <li><NavLink class="sidebar-sub-link" href="@SavedQuotesHref" Match="NavLinkMatch.All"><i class="bi bi-save2"></i><span>Cotizaciones guardadas</span></NavLink></li>
-                        <li><NavLink class="sidebar-sub-link" href="@RatesHref" Match="NavLinkMatch.Prefix"><i class="bi bi-tags"></i><span>Tarifas</span></NavLink></li>
-                        <li><NavLink class="sidebar-sub-link" href="@PromotionsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-percent"></i><span>Promociones</span></NavLink></li>
-                        <li><NavLink class="sidebar-sub-link" href="@TemplatesHref" Match="NavLinkMatch.Prefix"><i class="bi bi-chat-left-text"></i><span>Plantillas</span></NavLink></li>
+                        @if (IsFeatureEnabled(x => x.EnableQuotes))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@QuotesHref" Match="NavLinkMatch.All"><i class="bi bi-calculator"></i><span>Cotizador</span></NavLink></li>
+                        }
+                        @if (IsFeatureEnabled(x => x.EnableSavedQuotes))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@SavedQuotesHref" Match="NavLinkMatch.All"><i class="bi bi-save2"></i><span>Cotizaciones guardadas</span></NavLink></li>
+                        }
+                        @if (IsFeatureEnabled(x => x.EnableAdvancedRates))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@RatesHref" Match="NavLinkMatch.Prefix"><i class="bi bi-tags"></i><span>Tarifas</span></NavLink></li>
+                        }
+                        @if (IsFeatureEnabled(x => x.EnablePromotions))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@PromotionsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-percent"></i><span>Promociones</span></NavLink></li>
+                        }
+                        @if (IsFeatureEnabled(x => x.EnableTemplates))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@TemplatesHref" Match="NavLinkMatch.Prefix"><i class="bi bi-chat-left-text"></i><span>Plantillas</span></NavLink></li>
+                        }
                     </ul>
                 </li>
 
@@ -175,8 +196,11 @@
                     <ul class="nav-content collapse @(IsGroupOpen("gestion") ? "show" : "")">
                         <li><NavLink class="sidebar-sub-link" href="@PropertySettingsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-building"></i><span>Hospedajes</span></NavLink></li>
                         <li><NavLink class="sidebar-sub-link" href="@UnitsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-house-door"></i><span>Unidades</span></NavLink></li>
-                        <li><NavLink class="sidebar-sub-link" href="@ChannelSyncHref" Match="NavLinkMatch.Prefix"><i class="bi bi-arrow-repeat"></i><span>Sync canales</span></NavLink></li>
-                        @if (HasModule(SaasModule.Reports))
+                        @if (IsFeatureEnabled(x => x.EnableExternalCalendarSync))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@ChannelSyncHref" Match="NavLinkMatch.Prefix"><i class="bi bi-arrow-repeat"></i><span>Sync canales</span></NavLink></li>
+                        }
+                        @if (HasModule(SaasModule.Reports) && IsFeatureEnabled(x => x.EnableReports))
                         {
                             <li><NavLink class="sidebar-sub-link" href="@ReportsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-bar-chart"></i><span>Reportes</span></NavLink></li>
                         }
@@ -247,6 +271,7 @@
     private bool _propertiesLoaded;
     private List<PropertyListItemDto> _properties = new();
     private CurrentUserAccessDto? _access;
+    private PropertyFeatureSettingsDto? _featureSettings;
 
     private string DashboardHref => _defaultPropertyId is null ? (_propertiesLoaded && _properties.Count > 0 ? "/properties" : "/setup") : $"/dashboard/{_defaultPropertyId}";
     private string CalendarTimelineHref => _defaultPropertyId is null ? "/properties" : $"/calendar/{_defaultPropertyId}";
@@ -289,8 +314,12 @@
 
         Navigation.LocationChanged += (_, __) =>
         {
-            SyncMenuFromUrl();
-            InvokeAsync(StateHasChanged);
+            _ = InvokeAsync(async () =>
+            {
+                await LoadFeatureSettings();
+                SyncMenuFromUrl();
+                StateHasChanged();
+            });
         };
     }
 
@@ -300,6 +329,7 @@
         await LoadProperties();
         await LoadAccess();
         await LoadUserInfo();
+        await LoadFeatureSettings();
         SyncMenuFromUrl();
     }
 
@@ -361,6 +391,7 @@
         }
 
         _defaultPropertyId = propertyId;
+        await LoadFeatureSettings();
         Navigation.NavigateTo($"/dashboard/{propertyId}", forceLoad: false);
         SyncMenuFromUrl();
         StateHasChanged();
@@ -431,6 +462,22 @@
         else if (path.StartsWith("/users") || path.StartsWith("/account"))
             _openSidebarGroup = "cuenta";
     }
+
+
+    private async Task LoadFeatureSettings()
+    {
+        if (_defaultPropertyId is null)
+        {
+            _featureSettings = null;
+            return;
+        }
+
+        var res = await Api.GetAsync<AppResult<PropertyFeatureSettingsDto>>($"api/properties/{_defaultPropertyId}/feature-settings");
+        _featureSettings = res?.Success == true ? res.Data : null;
+    }
+
+    private bool IsFeatureEnabled(Func<PropertyFeatureSettingsDto, bool> selector)
+        => _featureSettings is null || selector(_featureSettings);
 
     private bool HasModule(SaasModule module) => _access?.Modules?.Any(x => x.Module == module && x.Allowed) ?? false;
     private string RoleLabel => _access?.IsOwner == true ? "Propietario" : (_access?.Role?.ToString() switch { "Admin" => "Administrador", "Reception" => "Recepción", "Operations" => "Operaciones", _ => "Usuario" });

@@ -21,4 +21,12 @@ public sealed class PropertiesController(IMediator mediator) : ControllerBase
 
     [HttpPut("{propertyId:int}")]
     public async Task<IActionResult> Upsert(int propertyId, [FromBody] UpsertPropertyCommand command, CancellationToken ct) => Ok(await mediator.Send(command with { PropertyId = propertyId }, ct));
+
+    [HttpGet("{propertyId:int}/feature-settings")]
+    public async Task<IActionResult> GetFeatureSettings(int propertyId, CancellationToken ct)
+        => Ok(await mediator.Send(new GetPropertyFeatureSettingsQuery(propertyId), ct));
+
+    [HttpPut("{propertyId:int}/feature-settings")]
+    public async Task<IActionResult> UpdateFeatureSettings(int propertyId, [FromBody] UpdatePropertyFeatureSettingsCommand command, CancellationToken ct)
+        => Ok(await mediator.Send(command with { PropertyId = propertyId }, ct));
 }

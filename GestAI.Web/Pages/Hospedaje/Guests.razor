@@ -86,18 +86,21 @@ else
                             <label class="form-label">Email</label>
                             <input class="form-control" @bind="_editing!.Email" />
                         </div>
-                        <div class="col-12 col-md-6">
-                            <label class="form-label">Tipo doc (int)</label>
-                            <input class="form-control" type="number" @bind="_editing!.DocumentType" />
-                        </div>
-                        <div class="col-12 col-md-6">
-                            <label class="form-label">Nro doc</label>
-                            <input class="form-control" @bind="_editing!.DocumentNumber" />
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">Notas</label>
-                            <textarea class="form-control" rows="3" @bind="_editing!.Notes"></textarea>
-                        </div>
+@if (!_simpleGuestMode)
+                        {
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">Tipo doc (int)</label>
+                                <input class="form-control" type="number" @bind="_editing!.DocumentType" />
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">Nro doc</label>
+                                <input class="form-control" @bind="_editing!.DocumentNumber" />
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Notas</label>
+                                <textarea class="form-control" rows="3" @bind="_editing!.Notes"></textarea>
+                            </div>
+                        }
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -117,6 +120,7 @@ else
     private List<GuestDto>? _guests;
 
     private bool _modalOpen;
+    private bool _simpleGuestMode;
     private GuestEditModel? _editing;
     private string? _error;
 
@@ -134,6 +138,8 @@ else
     private async Task Load()
     {
         _loaded = false;
+        var featureRes = await Api.GetAsync<AppResult<PropertyFeatureSettingsDto>>($"api/properties/{PropertyId}/feature-settings");
+        _simpleGuestMode = featureRes?.Data?.UseSimpleGuestMode == true;
         var res = await Api.GetAsync<AppResult<List<GuestDto>>>($"api/properties/{PropertyId}/guests?search={Uri.EscapeDataString(_search)}");
         _guests = res?.Data;
         _loaded = true;

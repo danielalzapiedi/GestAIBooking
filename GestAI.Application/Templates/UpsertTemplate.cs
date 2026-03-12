@@ -20,10 +20,12 @@ public sealed class UpsertTemplateCommandValidator : AbstractValidator<UpsertTem
 }
 public sealed class UpsertTemplateCommandHandler : IRequestHandler<UpsertTemplateCommand, AppResult<int>>
 {
-    private readonly IAppDbContext _db; private readonly ICurrentUser _current;
-    public UpsertTemplateCommandHandler(IAppDbContext db, ICurrentUser current) { _db = db; _current = current; }
+    private readonly IAppDbContext _db; private readonly ICurrentUser _current; private readonly IPropertyFeatureService _features;
+    public UpsertTemplateCommandHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features) { _db = db; _current = current; _features = features; }
     public async Task<AppResult<int>> Handle(UpsertTemplateCommand request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Templates, ct))
+            return AppResult<int>.Fail("feature_disabled", "Las plantillas están desactivadas para este hospedaje.");
         var propertyOk = await _db.Properties.AsNoTracking().AnyAsync(x => x.Id == request.PropertyId && (x.Account.OwnerUserId == _current.UserId || x.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)), ct);
         if (!propertyOk) return AppResult<int>.Fail("forbidden", "Propiedad inválida.");
         MessageTemplate entity;
