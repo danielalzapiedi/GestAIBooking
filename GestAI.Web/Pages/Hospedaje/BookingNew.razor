@@ -57,7 +57,7 @@ else
                         <div class="col-12 col-md-3">
                             <label class="form-label">Origen</label>
                             <select class="form-select" @bind="_source">
-                                @foreach (var source in Enum.GetValues<BookingSource>())
+                                @foreach (var source in AvailableSources)
                                 {
                                     <option value="@source">@source</option>
                                 }
@@ -228,11 +228,18 @@ else
     private string? _quickGuestPhone;
     private string? _quickGuestEmail;
     private bool _simpleGuestMode;
+    private bool _directBookingEnabled = true;
+
+    private IEnumerable<BookingSource> AvailableSources =>
+        _directBookingEnabled ? Enum.GetValues<BookingSource>() : Enum.GetValues<BookingSource>().Where(x => x != BookingSource.Direct);
 
     protected override async Task OnParametersSetAsync()
     {
         var settings = await FeatureState.EnsureAsync(PropertyId);
         _simpleGuestMode = settings?.UseSimpleGuestMode == true;
+        _directBookingEnabled = settings?.EnableDirectBooking ?? true;
+        if (!_directBookingEnabled && _source == BookingSource.Direct)
+            _source = BookingSource.WalkIn;
 
         var uRes = await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units");
         _units = uRes?.Data ?? new();
@@ -257,6 +264,8 @@ else
                 _notes = detail.Notes;
                 _internalNotes = detail.InternalNotes;
                 _source = detail.Source;
+                if (!_directBookingEnabled && _source == BookingSource.Direct)
+                    _source = BookingSource.WalkIn;
                 _status = detail.Status;
                 _manualPriceOverride = detail.ManualPriceOverride;
                 _guestId = detail.GuestId;

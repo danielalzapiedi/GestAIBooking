@@ -10,7 +10,7 @@
 <div class="row g-2 align-items-end mb-3">
     <div class="col-12 col-md-6">
         <label class="form-label">Buscar</label>
-        <input class="form-control" value="@_search" @oninput="OnSearchInput" placeholder="Nombre / Teléfono / Email" />
+        <input class="form-control" value="@_search" @oninput="OnSearchInput" placeholder="@(_simpleGuestMode ? "Nombre o teléfono" : "Nombre / Teléfono / Email")" />
     </div>
     <div class="col-12 col-md-6 text-md-end">
         <button class="btn btn-primary" @onclick="NewGuest"><i class="bi bi-plus"></i> Nuevo huésped</button>
@@ -35,8 +35,11 @@ else
                     <tr>
                         <th>Nombre</th>
                         <th>Teléfono</th>
-                        <th>Email</th>
-                        <th>Documento</th>
+                        @if (!_simpleGuestMode)
+                        {
+                            <th>Email</th>
+                            <th>Documento</th>
+                        }
                         <th style="width:140px;"></th>
                     </tr>
                 </thead>
@@ -46,8 +49,11 @@ else
                         <tr>
                             <td>@g.FullName</td>
                             <td>@g.Phone</td>
-                            <td>@g.Email</td>
-                            <td>@g.DocumentNumber</td>
+                            @if (!_simpleGuestMode)
+                            {
+                                <td>@g.Email</td>
+                                <td>@g.DocumentNumber</td>
+                            }
                             <td class="text-end">
                                 <button class="btn btn-sm btn-outline-secondary me-1" @onclick="(()=>EditGuest(g))"><i class="bi bi-pencil"></i></button>
                                 <button class="btn btn-sm btn-outline-danger" @onclick="(()=>DeleteGuest(g))"><i class="bi bi-trash"></i></button>

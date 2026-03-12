@@ -1,5 +1,6 @@
 @page "/account"
 @inject ApiClient Api
+@inject GestAI.Web.Service.PropertyFeatureState FeatureState
 @using GestAI.Web.Dtos
 
 <div class="pagetitle d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -81,6 +82,8 @@ else
         </div>
     </div>
 
+    @if (_auditViewEnabled)
+    {
     <div class="card">
         <div class="card-body pt-3">
             <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
@@ -135,6 +138,7 @@ else
             }
         </div>
     </div>
+    }
 }
 
 @code {
@@ -150,16 +154,35 @@ else
     private string _auditFromStr => _auditFrom?.ToString("yyyy-MM-dd") ?? string.Empty;
     private string _auditToStr => _auditTo?.ToString("yyyy-MM-dd") ?? string.Empty;
     private readonly string[] _availableEntities = ["Booking", "Payment", "RatePlan", "Promotion", "AccountUser", "Property", "Unit", "Account"];
+    private bool _auditViewEnabled = true;
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
     private async Task LoadAsync()
     {
+        await ResolveAuditFeatureAsync();
         var summary = await Api.GetAsync<AppResult<AccountSummaryDto>>("api/saas/account/summary");
         _summary = summary?.Data;
         _name = _summary?.Name ?? string.Empty;
-        await LoadAudit();
+        if (_auditViewEnabled)
+            await LoadAudit();
+        else
+            _audit = new();
         _loaded = true;
+    }
+
+    private async Task ResolveAuditFeatureAsync()
+    {
+        var access = await Api.GetAsync<AppResult<CurrentUserAccessDto>>("api/saas/me/access");
+        var propertyId = access?.Data?.DefaultPropertyId;
+        if (!propertyId.HasValue)
+        {
+            _auditViewEnabled = true;
+            return;
+        }
+
+        var settings = await FeatureState.EnsureAsync(propertyId.Value);
+        _auditViewEnabled = settings?.EnableAuditView ?? true;
     }
 
     private async Task LoadAudit()

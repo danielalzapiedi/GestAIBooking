@@ -1,6 +1,7 @@
 using GestAI.Application.Abstractions;
 using GestAI.Application.Payments;
 using GestAI.Application.Properties;
+using GestAI.Application.Quotes;
 using GestAI.Domain.Entities;
 using GestAI.Infrastructure.Persistence;
 using GestAI.Infrastructure.Saas;
@@ -70,6 +71,21 @@ public class PropertyFeatureSettingsTests
 
         Assert.False(result.Success);
         Assert.Equal("invalid_state", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task SavedQuotes_Are_Blocked_When_Feature_Disabled()
+    {
+        await using var db = CreateDbContext(nameof(SavedQuotes_Are_Blocked_When_Feature_Disabled));
+        SeedProperty(db);
+        db.PropertyFeatureSettings.Add(new PropertyFeatureSettings { PropertyId = 1, EnableQuotes = true, EnableSavedQuotes = false });
+        await db.SaveChangesAsync();
+
+        var handler = new GetQuoteQueryHandler(db, new FakeCurrentUser(), new PropertyFeatureService(db));
+        var result = await handler.Handle(new SaveQuoteCommand(1, 1, new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 3), 2, 0, "Guest", "g@test.com", "123"), CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal("feature_disabled", result.ErrorCode);
     }
 
     private static AppDbContext CreateDbContext(string dbName)

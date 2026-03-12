@@ -1,6 +1,7 @@
 @page "/dashboard/{PropertyId:int}"
 @using GestAI.Web.Dtos
 @inject ApiClient Api
+@inject GestAI.Web.Service.PropertyFeatureState FeatureState
 
 <PageTitle>Dashboard</PageTitle>
 
@@ -28,24 +29,27 @@ else
                 </div>
             </div>
         </div>
-        <div class="col-12 col-md-6 col-xl-3">
-            <div class="card kpi-card">
-                <div class="card-body">
-                    <div class="kpi-label">Ingresos cobrados</div>
-                    <div class="kpi-value">@FormatMoney(_data.CollectedIncomeMonth)</div>
-                    <div class="kpi-help">Pagos efectivamente cobrados en el mes.</div>
+        @if (_paymentsEnabled)
+        {
+            <div class="col-12 col-md-6 col-xl-3">
+                <div class="card kpi-card">
+                    <div class="card-body">
+                        <div class="kpi-label">Ingresos cobrados</div>
+                        <div class="kpi-value">@FormatMoney(_data.CollectedIncomeMonth)</div>
+                        <div class="kpi-help">Pagos efectivamente cobrados en el mes.</div>
+                    </div>
                 </div>
             </div>
-        </div>
-        <div class="col-12 col-md-6 col-xl-3">
-            <div class="card kpi-card">
-                <div class="card-body">
-                    <div class="kpi-label">Saldo pendiente</div>
-                    <div class="kpi-value">@FormatMoney(_data.PendingBalanceTotal)</div>
-                    <div class="kpi-help">Importe aún no cobrado en reservas activas.</div>
+            <div class="col-12 col-md-6 col-xl-3">
+                <div class="card kpi-card">
+                    <div class="card-body">
+                        <div class="kpi-label">Saldo pendiente</div>
+                        <div class="kpi-value">@FormatMoney(_data.PendingBalanceTotal)</div>
+                        <div class="kpi-help">Importe aún no cobrado en reservas activas.</div>
+                    </div>
                 </div>
             </div>
-        </div>
+        }
         <div class="col-12 col-md-6 col-xl-3">
             <div class="card kpi-card">
                 <div class="card-body">
@@ -80,7 +84,10 @@ else
                                         <th>Huésped</th>
                                         <th>Unidad</th>
                                         <th>Ingreso</th>
-                                        <th class="text-end">Saldo</th>
+                                        @if (_paymentsEnabled)
+                                        {
+                                            <th class="text-end">Saldo</th>
+                                        }
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -91,7 +98,10 @@ else
                                         <td>@booking.GuestName</td>
                                         <td>@booking.UnitName</td>
                                         <td>@booking.CheckInDate.ToString("dd/MM")</td>
-                                        <td class="text-end">@FormatMoney(booking.PendingAmount)</td>
+                                        @if (_paymentsEnabled)
+                                        {
+                                            <td class="text-end">@FormatMoney(booking.PendingAmount)</td>
+                                        }
                                     </tr>
                                 }
                                 </tbody>
@@ -102,6 +112,8 @@ else
             </div>
         </div>
 
+        @if (_agendaEnabled || _paymentsEnabled)
+        {
         <div class="col-12 col-xl-5">
             <div class="card h-100">
                 <div class="card-body">
@@ -111,6 +123,8 @@ else
                     </div>
 
                     <div class="agenda-stack">
+                        @if (_agendaEnabled)
+                        {
                         <div class="agenda-booking-card">
                             <div class="agenda-booking-top">
                                 <div>
@@ -129,6 +143,9 @@ else
                                 <span class="ui-badge ui-badge-warning">@_data.CheckOutsToday</span>
                             </div>
                         </div>
+                        }
+                        @if (_paymentsEnabled)
+                        {
                         <div class="agenda-booking-card">
                             <div class="agenda-booking-top">
                                 <div>
@@ -138,12 +155,16 @@ else
                                 <span class="ui-badge ui-badge-danger">@FormatMoney(_data.PendingBalanceTotal)</span>
                             </div>
                         </div>
+                        }
                     </div>
                 </div>
             </div>
         </div>
+        }
     </div>
 
+    @if (_reportsEnabled)
+    {
     <div class="row g-3">
         <div class="col-12 col-xl-6">
             <div class="card h-100">
@@ -203,16 +224,27 @@ else
             </div>
         </div>
     </div>
+    }
 }
 
 @code {
     [Parameter] public int PropertyId { get; set; }
     private DashboardSummaryDto? _data;
+    private bool _paymentsEnabled = true;
+    private bool _agendaEnabled = true;
+    private bool _reportsEnabled = true;
 
     private decimal MaxIncome => _data?.IncomeByMonth.Count > 0 ? _data.IncomeByMonth.Max(x => x.Value) : 0m;
     private int MaxStatusCount => _data?.BookingsByStatus.Count > 0 ? _data.BookingsByStatus.Max(x => x.Count) : 0;
 
-    protected override async Task OnParametersSetAsync() => await LoadAsync();
+    protected override async Task OnParametersSetAsync()
+    {
+        var settings = await FeatureState.EnsureAsync(PropertyId);
+        _paymentsEnabled = settings?.EnablePayments ?? true;
+        _agendaEnabled = settings?.EnableAgenda ?? true;
+        _reportsEnabled = settings?.EnableReports ?? true;
+        await LoadAsync();
+    }
 
     private async Task LoadAsync() => _data = (await Api.GetAsync<AppResult<DashboardSummaryDto>>($"api/properties/{PropertyId}/dashboard"))?.Data;
 
@@ -225,16 +257,18 @@ else
     private string AlertBadgeText()
     {
         if (_data is null) return "Sin datos";
-        if (_data.CheckInsToday + _data.CheckOutsToday + (_data.PendingBalanceTotal > 0 ? 1 : 0) == 0) return "Sin alertas";
-        if (_data.PendingBalanceTotal > 0) return "Requiere atención";
+        var operationAlerts = _agendaEnabled ? _data.CheckInsToday + _data.CheckOutsToday : 0;
+        var paymentAlerts = _paymentsEnabled && _data.PendingBalanceTotal > 0 ? 1 : 0;
+        if (operationAlerts + paymentAlerts == 0) return "Sin alertas";
+        if (paymentAlerts > 0) return "Requiere atención";
         return "Operación normal";
     }
 
     private string AlertBadgeClass()
     {
         if (_data is null) return "ui-badge ui-badge-neutral";
-        if (_data.PendingBalanceTotal > 0) return "ui-badge ui-badge-warning";
-        if (_data.CheckInsToday > 0 || _data.CheckOutsToday > 0) return "ui-badge ui-badge-info";
+        if (_paymentsEnabled && _data.PendingBalanceTotal > 0) return "ui-badge ui-badge-warning";
+        if (_agendaEnabled && (_data.CheckInsToday > 0 || _data.CheckOutsToday > 0)) return "ui-badge ui-badge-info";
         return "ui-badge ui-badge-success";
     }
 
