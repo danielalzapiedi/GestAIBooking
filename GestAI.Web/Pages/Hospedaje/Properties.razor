@@ -70,7 +70,8 @@
                             <td class="text-end">
                                 <button class="btn btn-sm btn-outline-primary me-1" @onclick='() => Nav.NavigateTo($"/properties/{item.Id}/edit")'>Editar</button>
                                 <button class="btn btn-sm btn-outline-secondary me-1" @onclick='() => Nav.NavigateTo($"/units/{item.Id}")'>Unidades</button>
-                                <button class="btn btn-sm btn-outline-dark" @onclick='() => Nav.NavigateTo($"/rates/{item.Id}")'>Tarifas</button>
+                                <button class="btn btn-sm btn-outline-dark me-1" @onclick='() => Nav.NavigateTo($"/rates/{item.Id}")'>Tarifas</button>
+                                <button class="btn btn-sm btn-outline-info" @onclick='() => Nav.NavigateTo($"/properties/{item.Id}/features")'>Funciones</button>
                             </td>
                         </tr>
                     }

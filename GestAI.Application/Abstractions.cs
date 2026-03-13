@@ -12,6 +12,7 @@ public interface IAppDbContext
     DbSet<AccountSubscriptionPlan> AccountSubscriptionPlans { get; }
     DbSet<SaasPlanDefinition> SaasPlanDefinitions { get; }
     DbSet<Property> Properties { get; }
+    DbSet<PropertyFeatureSettings> PropertyFeatureSettings { get; }
     DbSet<Unit> Units { get; }
     DbSet<Guest> Guests { get; }
     DbSet<Booking> Bookings { get; }
@@ -96,6 +97,12 @@ public interface IBookingAssistantService
 public interface IQuoteSuggestionService
 {
     Task<QuoteSuggestionResult> SuggestAsync(QuoteSuggestionRequest request, CancellationToken ct);
+}
+
+public interface IPropertyFeatureService
+{
+    Task<PropertyFeatureSettings> GetSettingsAsync(int propertyId, CancellationToken ct);
+    Task<bool> IsEnabledAsync(int propertyId, GestAI.Domain.Enums.PropertyFeature feature, CancellationToken ct);
 }
 
 public sealed record BookingAssistantRequest(

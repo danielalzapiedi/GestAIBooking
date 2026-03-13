@@ -58,15 +58,19 @@ public sealed class UpsertBookingCommandHandler :
 {
     private readonly IAppDbContext _db;
     private readonly ICurrentUser _current;
+    private readonly IPropertyFeatureService _features;
 
-    public UpsertBookingCommandHandler(IAppDbContext db, ICurrentUser current)
+    public UpsertBookingCommandHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features)
     {
         _db = db;
         _current = current;
+        _features = features;
     }
 
     public async Task<AppResult<int>> Handle(UpsertBookingCommand request, CancellationToken ct)
     {
+        var promotionsEnabled = await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Promotions, ct);
+
         var property = await _db.Properties.AsNoTracking().FirstOrDefaultAsync(p => p.Id == request.PropertyId && (p.Account.OwnerUserId == _current.UserId || p.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)) && p.IsActive, ct);
         if (property is null) return AppResult<int>.Fail("forbidden", "Hospedaje inválido, inactivo o sin acceso.");
 
@@ -93,7 +97,9 @@ public sealed class UpsertBookingCommandHandler :
             .AnyAsync(x => x.StartDate < request.CheckOutDate && request.CheckInDate < x.EndDate, ct);
         if (hasExternalOverlap) return AppResult<int>.Fail("overlap_external", "La unidad tiene una reserva externa sincronizada en ese rango.");
 
-        var promos = await _db.Promotions.AsNoTracking().Where(x => x.PropertyId == request.PropertyId && (x.UnitId == null || x.UnitId == request.UnitId) && x.IsActive).ToListAsync(ct);
+        var promos = promotionsEnabled
+            ? await _db.Promotions.AsNoTracking().Where(x => x.PropertyId == request.PropertyId && (x.UnitId == null || x.UnitId == request.UnitId) && x.IsActive).ToListAsync(ct)
+            : [];
         if (!request.OverrideCommercialRules)
         {
             var errors = CommercialPricing.ValidatePromotionsAndRules(promos, request.CheckInDate, request.CheckOutDate);
@@ -215,6 +221,8 @@ public sealed class UpsertBookingCommandHandler :
 
     public async Task<AppResult> Handle(CheckInOutCommand request, CancellationToken ct)
     {
+        var housekeepingEnabled = await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Housekeeping, ct);
+
         var booking = await _db.Bookings.Include(x => x.Unit).FirstOrDefaultAsync(x => x.Id == request.BookingId && x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)), ct);
         if (booking is null) return AppResult.Fail("not_found", "Reserva no encontrada.");
 
@@ -235,22 +243,25 @@ public sealed class UpsertBookingCommandHandler :
             booking.OperationalStatus = BookingOperationalStatus.CheckedOut;
             booking.ActualCheckOutTime = request.ActualTime ?? TimeOnly.FromDateTime(DateTime.Now);
             booking.CheckOutNotes = request.Notes?.Trim();
-            booking.Unit.OperationalStatus = UnitOperationalStatus.PendingCleaning;
+            booking.Unit.OperationalStatus = housekeepingEnabled ? UnitOperationalStatus.PendingCleaning : UnitOperationalStatus.Clean;
 
-            var hasPendingCleaningTask = await _db.OperationalTasks.AnyAsync(t => t.PropertyId == request.PropertyId && t.BookingId == booking.Id && t.Type == OperationalTaskType.Cleaning && t.Status != OperationalTaskStatus.Completed && t.Status != OperationalTaskStatus.Cancelled, ct);
-            if (!hasPendingCleaningTask)
+            if (housekeepingEnabled)
             {
-                _db.OperationalTasks.Add(new OperationalTask
+                var hasPendingCleaningTask = await _db.OperationalTasks.AnyAsync(t => t.PropertyId == request.PropertyId && t.BookingId == booking.Id && t.Type == OperationalTaskType.Cleaning && t.Status != OperationalTaskStatus.Completed && t.Status != OperationalTaskStatus.Cancelled, ct);
+                if (!hasPendingCleaningTask)
                 {
-                    PropertyId = request.PropertyId,
-                    UnitId = booking.UnitId,
-                    BookingId = booking.Id,
-                    Type = OperationalTaskType.Cleaning,
-                    Priority = OperationalTaskPriority.High,
-                    ScheduledDate = DateOnly.FromDateTime(DateTime.Today),
-                    Title = $"Limpieza post checkout - {booking.Unit.Name}",
-                    Notes = $"Generada automáticamente por checkout de {booking.BookingCode}."
-                });
+                    _db.OperationalTasks.Add(new OperationalTask
+                    {
+                        PropertyId = request.PropertyId,
+                        UnitId = booking.UnitId,
+                        BookingId = booking.Id,
+                        Type = OperationalTaskType.Cleaning,
+                        Priority = OperationalTaskPriority.High,
+                        ScheduledDate = DateOnly.FromDateTime(DateTime.Today),
+                        Title = $"Limpieza post checkout - {booking.Unit.Name}",
+                        Notes = $"Generada automáticamente por checkout de {booking.BookingCode}."
+                    });
+                }
             }
         }
 

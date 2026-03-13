@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@implements IDisposable
 @inject ApiClient Api
 @using Microsoft.AspNetCore.Components.Authorization
 @inject AuthenticationStateProvider AuthProvider
@@ -6,6 +7,7 @@
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 @inject ITokenStore TokenStore
+@inject GestAI.Web.Service.PropertyFeatureState FeatureState
 @using System.Security.Claims
 @using GestAI.Web.Dtos
 
@@ -132,6 +134,8 @@
                     </li>
                 }
 
+                @if (ShowOperationGroup)
+                {
                 <li class="sidebar-section-label">Operación</li>
                 <li class="nav-item app-sidebar-group">
                     <button type="button" class="nav-link sidebar-group-toggle @(IsGroupOpen("operacion") ? "" : "collapsed")" @onclick='() => ToggleGroup("operacion")'>
@@ -143,12 +147,21 @@
                         <li><NavLink class="sidebar-sub-link" href="@DashboardHref" Match="NavLinkMatch.Prefix"><i class="bi bi-grid"></i><span>Dashboard</span></NavLink></li>
                         <li><NavLink class="sidebar-sub-link" href="@CalendarTimelineHref" Match="NavLinkMatch.Prefix"><i class="bi bi-calendar3"></i><span>Calendario</span></NavLink></li>
                         <li><NavLink class="sidebar-sub-link" href="@BookingsListHref" Match="NavLinkMatch.Prefix"><i class="bi bi-journal-bookmark"></i><span>Reservas</span></NavLink></li>
-                        <li><NavLink class="sidebar-sub-link" href="@AgendaHref" Match="NavLinkMatch.Prefix"><i class="bi bi-clock-history"></i><span>Agenda</span></NavLink></li>
-                        <li><NavLink class="sidebar-sub-link" href="@HousekeepingHref" Match="NavLinkMatch.Prefix"><i class="bi bi-brush"></i><span>Limpieza</span></NavLink></li>
+                        @if (IsFeatureEnabled(x => x.EnableAgenda))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@AgendaHref" Match="NavLinkMatch.Prefix"><i class="bi bi-clock-history"></i><span>Agenda</span></NavLink></li>
+                        }
+                        @if (IsFeatureEnabled(x => x.EnableHousekeeping))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@HousekeepingHref" Match="NavLinkMatch.Prefix"><i class="bi bi-brush"></i><span>Limpieza</span></NavLink></li>
+                        }
                         <li><NavLink class="sidebar-sub-link" href="@GuestsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-people"></i><span>Huéspedes</span></NavLink></li>
                     </ul>
                 </li>
+                }
 
+                @if (ShowCommercialGroup)
+                {
                 <li class="sidebar-section-label">Comercial</li>
                 <li class="nav-item app-sidebar-group">
                     <button type="button" class="nav-link sidebar-group-toggle @(IsGroupOpen("comercial") ? "" : "collapsed")" @onclick='() => ToggleGroup("comercial")'>
@@ -157,14 +170,32 @@
                         <i class="bi bi-chevron-down ms-auto"></i>
                     </button>
                     <ul class="nav-content collapse @(IsGroupOpen("comercial") ? "show" : "")">
-                        <li><NavLink class="sidebar-sub-link" href="@QuotesHref" Match="NavLinkMatch.All"><i class="bi bi-calculator"></i><span>Cotizador</span></NavLink></li>
-                        <li><NavLink class="sidebar-sub-link" href="@SavedQuotesHref" Match="NavLinkMatch.All"><i class="bi bi-save2"></i><span>Cotizaciones guardadas</span></NavLink></li>
-                        <li><NavLink class="sidebar-sub-link" href="@RatesHref" Match="NavLinkMatch.Prefix"><i class="bi bi-tags"></i><span>Tarifas</span></NavLink></li>
-                        <li><NavLink class="sidebar-sub-link" href="@PromotionsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-percent"></i><span>Promociones</span></NavLink></li>
-                        <li><NavLink class="sidebar-sub-link" href="@TemplatesHref" Match="NavLinkMatch.Prefix"><i class="bi bi-chat-left-text"></i><span>Plantillas</span></NavLink></li>
+                        @if (IsFeatureEnabled(x => x.EnableQuotes))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@QuotesHref" Match="NavLinkMatch.All"><i class="bi bi-calculator"></i><span>Cotizador</span></NavLink></li>
+                        }
+                        @if (IsFeatureEnabled(x => x.EnableSavedQuotes))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@SavedQuotesHref" Match="NavLinkMatch.All"><i class="bi bi-save2"></i><span>Cotizaciones guardadas</span></NavLink></li>
+                        }
+                        @if (IsFeatureEnabled(x => x.EnableAdvancedRates))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@RatesHref" Match="NavLinkMatch.Prefix"><i class="bi bi-tags"></i><span>Tarifas</span></NavLink></li>
+                        }
+                        @if (IsFeatureEnabled(x => x.EnablePromotions))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@PromotionsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-percent"></i><span>Promociones</span></NavLink></li>
+                        }
+                        @if (IsFeatureEnabled(x => x.EnableTemplates))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@TemplatesHref" Match="NavLinkMatch.Prefix"><i class="bi bi-chat-left-text"></i><span>Plantillas</span></NavLink></li>
+                        }
                     </ul>
                 </li>
+                }
 
+                @if (ShowManagementGroup)
+                {
                 <li class="sidebar-section-label">Gestión</li>
                 <li class="nav-item app-sidebar-group">
                     <button type="button" class="nav-link sidebar-group-toggle @(IsGroupOpen("gestion") ? "" : "collapsed")" @onclick='() => ToggleGroup("gestion")'>
@@ -175,14 +206,20 @@
                     <ul class="nav-content collapse @(IsGroupOpen("gestion") ? "show" : "")">
                         <li><NavLink class="sidebar-sub-link" href="@PropertySettingsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-building"></i><span>Hospedajes</span></NavLink></li>
                         <li><NavLink class="sidebar-sub-link" href="@UnitsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-house-door"></i><span>Unidades</span></NavLink></li>
-                        <li><NavLink class="sidebar-sub-link" href="@ChannelSyncHref" Match="NavLinkMatch.Prefix"><i class="bi bi-arrow-repeat"></i><span>Sync canales</span></NavLink></li>
-                        @if (HasModule(SaasModule.Reports))
+                        @if (IsFeatureEnabled(x => x.EnableExternalCalendarSync))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@ChannelSyncHref" Match="NavLinkMatch.Prefix"><i class="bi bi-arrow-repeat"></i><span>Sync canales</span></NavLink></li>
+                        }
+                        @if (HasModule(SaasModule.Reports) && IsFeatureEnabled(x => x.EnableReports))
                         {
                             <li><NavLink class="sidebar-sub-link" href="@ReportsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-bar-chart"></i><span>Reportes</span></NavLink></li>
                         }
                     </ul>
                 </li>
+                }
 
+                @if (ShowAccountGroup)
+                {
                 <li class="sidebar-section-label">Cuenta</li>
                 <li class="nav-item app-sidebar-group">
                     <button type="button" class="nav-link sidebar-group-toggle @(IsGroupOpen("cuenta") ? "" : "collapsed")" @onclick='() => ToggleGroup("cuenta")'>
@@ -201,6 +238,7 @@
                         }
                     </ul>
                 </li>
+                }
             </ul>
         </aside>
 
@@ -247,6 +285,7 @@
     private bool _propertiesLoaded;
     private List<PropertyListItemDto> _properties = new();
     private CurrentUserAccessDto? _access;
+    private PropertyFeatureSettingsDto? _featureSettings;
 
     private string DashboardHref => _defaultPropertyId is null ? (_propertiesLoaded && _properties.Count > 0 ? "/properties" : "/setup") : $"/dashboard/{_defaultPropertyId}";
     private string CalendarTimelineHref => _defaultPropertyId is null ? "/properties" : $"/calendar/{_defaultPropertyId}";
@@ -287,10 +326,16 @@
             InvokeAsync(StateHasChanged);
         };
 
+        FeatureState.FeaturesChanged += OnFeaturesChanged;
+
         Navigation.LocationChanged += (_, __) =>
         {
-            SyncMenuFromUrl();
-            InvokeAsync(StateHasChanged);
+            _ = InvokeAsync(async () =>
+            {
+                await LoadFeatureSettings();
+                SyncMenuFromUrl();
+                StateHasChanged();
+            });
         };
     }
 
@@ -300,6 +345,7 @@
         await LoadProperties();
         await LoadAccess();
         await LoadUserInfo();
+        await LoadFeatureSettings();
         SyncMenuFromUrl();
     }
 
@@ -361,6 +407,7 @@
         }
 
         _defaultPropertyId = propertyId;
+        _featureSettings = await FeatureState.RefreshAsync(propertyId);
         Navigation.NavigateTo($"/dashboard/{propertyId}", forceLoad: false);
         SyncMenuFromUrl();
         StateHasChanged();
@@ -432,6 +479,33 @@
             _openSidebarGroup = "cuenta";
     }
 
+
+    private async Task LoadFeatureSettings()
+    {
+        if (_defaultPropertyId is null)
+        {
+            _featureSettings = null;
+            return;
+        }
+
+        _featureSettings = await FeatureState.EnsureAsync(_defaultPropertyId.Value);
+    }
+
+    private void OnFeaturesChanged()
+    {
+        if (_defaultPropertyId is null)
+            return;
+
+        if (FeatureState.CurrentPropertyId == _defaultPropertyId)
+        {
+            _featureSettings = FeatureState.Current;
+            _ = InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private bool IsFeatureEnabled(Func<PropertyFeatureSettingsDto, bool> selector)
+        => _featureSettings is null || selector(_featureSettings);
+
     private bool HasModule(SaasModule module) => _access?.Modules?.Any(x => x.Module == module && x.Allowed) ?? false;
     private string RoleLabel => _access?.IsOwner == true ? "Propietario" : (_access?.Role?.ToString() switch { "Admin" => "Administrador", "Reception" => "Recepción", "Operations" => "Operaciones", _ => "Usuario" });
 
@@ -454,4 +528,23 @@
     }
 
     private void DismissToast(string toast) => _toasts.Remove(toast);
+
+    private bool ShowOperationGroup => true;
+
+    private bool ShowCommercialGroup =>
+        IsFeatureEnabled(x => x.EnableQuotes)
+        || IsFeatureEnabled(x => x.EnableSavedQuotes)
+        || IsFeatureEnabled(x => x.EnableAdvancedRates)
+        || IsFeatureEnabled(x => x.EnablePromotions)
+        || IsFeatureEnabled(x => x.EnableTemplates);
+
+    private bool ShowManagementGroup =>
+        true;
+
+    private bool ShowAccountGroup => HasModule(SaasModule.Users) || HasModule(SaasModule.Configuration);
+
+    public void Dispose()
+    {
+        FeatureState.FeaturesChanged -= OnFeaturesChanged;
+    }
 }

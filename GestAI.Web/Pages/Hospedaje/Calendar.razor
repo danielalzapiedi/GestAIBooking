@@ -1,6 +1,7 @@
 @page "/calendar/{PropertyId:int}"
 @inject ApiClient Api
 @inject NavigationManager Nav
+@inject GestAI.Web.Service.PropertyFeatureState FeatureState
 @using GestAI.Web.Dtos
 
 <PageTitle>Calendario</PageTitle>
@@ -91,7 +92,14 @@
                         {
                             <div class="resource-row">
                                 <div class="resource-name">@unit.Name</div>
-                                <div class="resource-meta">@OperationalLabel(unit.OperationalStatus) · @ActiveLabel(unit.IsActive)</div>
+                                @if (_housekeepingEnabled)
+                                {
+                                    <div class="resource-meta">@OperationalLabel(unit.OperationalStatus) · @ActiveLabel(unit.IsActive)</div>
+                                }
+                                else
+                                {
+                                    <div class="resource-meta">@ActiveLabel(unit.IsActive)</div>
+                                }
                             </div>
                         }
                     </div>
@@ -138,8 +146,11 @@
                     <div class="legend-item"><span class="legend-dot legend-checkedin"></span> Check-in / ocupada</div>
                     <div class="legend-item"><span class="legend-dot legend-checkedout"></span> Check-out / finalizada</div>
                     <div class="legend-item"><span class="legend-dot legend-blocked"></span> Bloqueo</div>
-                    <div class="legend-item"><span class="legend-dot legend-external-booking"></span> Booking externo</div>
-                    <div class="legend-item"><span class="legend-dot legend-external-airbnb"></span> Airbnb externo</div>
+                    @if (_externalSyncEnabled)
+                    {
+                        <div class="legend-item"><span class="legend-dot legend-external-booking"></span> Booking externo</div>
+                        <div class="legend-item"><span class="legend-dot legend-external-airbnb"></span> Airbnb externo</div>
+                    }
                 </div>
             }
         </div>
@@ -199,6 +210,8 @@
     private List<CalendarBookingDto> _bookings = new();
     private List<BlockedDateDto> _blocked = new();
     private List<ExternalCalendarEventDto> _externalEvents = new();
+    private bool _externalSyncEnabled = true;
+    private bool _housekeepingEnabled = true;
     private DateOnly _from = DateOnly.FromDateTime(DateTime.Today);
     private int _days = 21;
     private int _selectedUnitId;
@@ -213,10 +226,15 @@
     private async Task Load()
     {
         _loaded = false;
+        var settings = await FeatureState.EnsureAsync(PropertyId);
+        _externalSyncEnabled = settings?.EnableExternalCalendarSync ?? true;
+        _housekeepingEnabled = settings?.EnableHousekeeping ?? true;
         _units = (await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units"))?.Data ?? new();
         _bookings = (await Api.GetAsync<AppResult<List<CalendarBookingDto>>>($"api/properties/{PropertyId}/bookings/range?from={_from:yyyy-MM-dd}&to={_toExclusive:yyyy-MM-dd}"))?.Data ?? new();
         _blocked = (await Api.GetAsync<AppResult<List<BlockedDateDto>>>($"api/properties/{PropertyId}/blockedDates/range?from={_from:yyyy-MM-dd}&to={_toExclusive:yyyy-MM-dd}"))?.Data ?? new();
-        _externalEvents = (await Api.GetAsync<AppResult<List<ExternalCalendarEventDto>>>($"api/properties/{PropertyId}/external-calendars/events?from={_from:yyyy-MM-dd}&to={_toExclusive:yyyy-MM-dd}"))?.Data ?? new();
+        _externalEvents = _externalSyncEnabled
+            ? (await Api.GetAsync<AppResult<List<ExternalCalendarEventDto>>>($"api/properties/{PropertyId}/external-calendars/events?from={_from:yyyy-MM-dd}&to={_toExclusive:yyyy-MM-dd}"))?.Data ?? new()
+            : new();
         _rangeDays = Enumerable.Range(0, _days).Select(i => _from.AddDays(i)).ToList();
         _loaded = true;
     }

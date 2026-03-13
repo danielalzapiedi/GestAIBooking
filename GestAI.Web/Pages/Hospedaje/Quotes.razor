@@ -2,15 +2,30 @@
 @using GestAI.Web.Dtos
 @inject ApiClient Api
 @inject NavigationManager Nav
+@inject GestAI.Web.Service.PropertyFeatureState FeatureState
 
 <PageTitle>Cotizador</PageTitle>
 
+@if (!_featureChecked)
+{
+    <EmptyState Title="Cargando configuración" Description="Estamos validando las funciones habilitadas para este hospedaje." Icon="bi-hourglass-split" />
+}
+else if (!_quotesEnabled)
+{
+    <EmptyState Title="Funcionalidad desactivada" Description="El cotizador está desactivado para este hospedaje." Icon="bi-toggle-off" />
+    <button class="btn btn-outline-primary" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>Ir al dashboard</button>
+}
+else
+{
 <div class="pagetitle d-flex justify-content-between align-items-center">
     <div>
         <h1>Cotizador comercial</h1>
-        <p class="text-muted mb-0">Cotizá, simulá y guardá propuestas comerciales con desglose tarifario.</p>
+        <p class="text-muted mb-0">Cotizá y simulá propuestas comerciales con desglose tarifario.</p>
     </div>
-    <button class="btn btn-outline-secondary" @onclick='() => Nav.NavigateTo($"/quotes/{PropertyId}/saved")'>Ver cotizaciones guardadas</button>
+    @if (_savedQuotesEnabled)
+    {
+        <button class="btn btn-outline-secondary" @onclick='() => Nav.NavigateTo($"/quotes/{PropertyId}/saved")'>Ver cotizaciones guardadas</button>
+    }
 </div>
 
 <div class="card mb-3">
@@ -26,7 +41,10 @@
             <div class="col-md-2"><label class="form-label">Teléfono</label><input class="form-control" @bind="_guestPhone" /></div>
             <div class="col-md-4 d-flex align-items-end gap-2">
                 <button class="btn btn-primary flex-fill" @onclick="Search">Cotizar</button>
-                <button class="btn btn-outline-primary flex-fill" @onclick="SaveCurrentQuote" disabled="@(_quote is null || !_quote.AvailableUnits.Any())">Guardar</button>
+                @if (_savedQuotesEnabled)
+                {
+                    <button class="btn btn-outline-primary flex-fill" @onclick="SaveCurrentQuote" disabled="@(_quote is null || !_quote.AvailableUnits.Any())">Guardar</button>
+                }
             </div>
         </div>
     </div>
@@ -46,7 +64,10 @@
                     <h5 class="card-title">Resumen</h5>
                     <div class="mb-2">Noches: <strong>@_quote.Nights</strong></div>
                     <div class="mb-2">Tarifa base: <strong>@_quote.BaseAmount.ToString("0.00")</strong></div>
-                    <div class="mb-2">Promociones: <strong class="text-success">- @_quote.PromotionsAmount.ToString("0.00")</strong></div>
+                    @if (_promotionsEnabled)
+                    {
+                        <div class="mb-2">Promociones: <strong class="text-success">- @_quote.PromotionsAmount.ToString("0.00")</strong></div>
+                    }
                     <div class="mb-2">Total final: <strong>@_quote.Total.ToString("0.00")</strong></div>
                     <div>Seña sugerida: <strong>@_quote.SuggestedDepositAmount.ToString("0.00")</strong></div>
                     <hr />
@@ -75,7 +96,20 @@
                     {
                         <div class="table-responsive">
                             <table class="table table-sm align-middle">
-                                <thead><tr><th>Unidad</th><th>Estado</th><th>Base</th><th>Promo</th><th>Total</th><th>Seña</th><th></th></tr></thead>
+                                <thead>
+                                    <tr>
+                                        <th>Unidad</th>
+                                        <th>Estado</th>
+                                        <th>Base</th>
+                                        @if (_promotionsEnabled)
+                                        {
+                                            <th>Promo</th>
+                                        }
+                                        <th>Total</th>
+                                        <th>Seña</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
                                 <tbody>
                                 @foreach (var u in _quote.AvailableUnits)
                                 {
@@ -83,7 +117,10 @@
                                         <td><strong>@u.UnitName</strong></td>
                                         <td><span class="badge bg-light text-dark border">@u.OperationalStatus</span></td>
                                         <td>@u.BaseAmount.ToString("0.00")</td>
-                                        <td class="text-success">- @u.PromotionsAmount.ToString("0.00")</td>
+                                        @if (_promotionsEnabled)
+                                        {
+                                            <td class="text-success">- @u.PromotionsAmount.ToString("0.00")</td>
+                                        }
                                         <td><strong>@u.Total.ToString("0.00")</strong></td>
                                         <td>@u.SuggestedDepositAmount.ToString("0.00")</td>
                                         <td class="text-end">
@@ -119,7 +156,7 @@
                                 </tbody>
                             </table>
                         </div>
-                        @if (_selectedUnit.AppliedPromotions.Any())
+                        @if (_promotionsEnabled && _selectedUnit.AppliedPromotions.Any())
                         {
                             <div class="mt-3">
                                 <h6>Promociones aplicadas</h6>
@@ -129,7 +166,7 @@
                                 }
                             </div>
                         }
-                        @if (_selectedUnit.Rules.Any())
+                        @if (_advancedRatesEnabled && _selectedUnit.Rules.Any())
                         {
                             <div class="mt-3 alert alert-warning mb-0 small">
                                 @foreach (var rule in _selectedUnit.Rules)
@@ -147,7 +184,7 @@
                         <h5 class="card-title">Detalle por noche</h5>
                         <div class="table-responsive">
                             <table class="table table-sm align-middle">
-                                <thead><tr><th>Fecha</th><th>Base</th><th>Ajustes</th><th class="text-end">Final</th></tr></thead>
+                                <thead><tr><th>Fecha</th><th>Base</th><th>@(_advancedRatesEnabled ? "Ajustes" : "Detalle")</th><th class="text-end">Final</th></tr></thead>
                                 <tbody>
                                 @foreach (var night in _selectedUnit.NightBreakdown)
                                 {
@@ -155,7 +192,11 @@
                                         <td>@night.Date.ToString("dd/MM/yyyy")</td>
                                         <td>@night.BaseRate.ToString("0.00")</td>
                                         <td>
-                                            @if (!night.Adjustments.Any())
+                                            @if (!_advancedRatesEnabled)
+                                            {
+                                                <span class="text-muted">Tarifa simple</span>
+                                            }
+                                            else if (!night.Adjustments.Any())
                                             {
                                                 <span class="text-muted">Sin ajustes</span>
                                             }
@@ -179,9 +220,15 @@
         </div>
     }
 }
+}
 
 @code {
     [Parameter] public int PropertyId { get; set; }
+    private bool _featureChecked;
+    private bool _quotesEnabled = true;
+    private bool _savedQuotesEnabled = true;
+    private bool _promotionsEnabled = true;
+    private bool _advancedRatesEnabled = true;
     private DateOnly _checkIn = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
     private DateOnly _checkOut = DateOnly.FromDateTime(DateTime.Today.AddDays(3));
     private int _adults = 2;
@@ -198,6 +245,15 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        var settings = await FeatureState.EnsureAsync(PropertyId);
+        _quotesEnabled = settings?.EnableQuotes ?? true;
+        _savedQuotesEnabled = settings?.EnableSavedQuotes ?? true;
+        _promotionsEnabled = settings?.EnablePromotions ?? true;
+        _advancedRatesEnabled = settings?.EnableAdvancedRates ?? true;
+        _featureChecked = true;
+        if (!_quotesEnabled)
+            return;
+
         _units = (await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units"))?.Data ?? new();
     }
 
@@ -213,6 +269,13 @@
 
     private async Task SaveCurrentQuote()
     {
+        if (!_savedQuotesEnabled)
+        {
+            _success = false;
+            _message = "Las cotizaciones guardadas están desactivadas para este hospedaje.";
+            return;
+        }
+
         var res = await Api.PostAsync<SaveQuoteCommand, AppResult<SavedQuoteDto>>($"api/properties/{PropertyId}/quotes/save", new SaveQuoteCommand(PropertyId, _selectedUnit?.UnitId ?? _unitId, _checkIn, _checkOut, _adults, _children, _guestName, _guestEmail, _guestPhone));
         _success = res?.Success == true;
         _message = _success ? $"Cotización guardada correctamente. Token: {res?.Data?.PublicToken}" : (res?.Message ?? "No se pudo guardar la cotización.");

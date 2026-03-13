@@ -12,15 +12,20 @@ public sealed class GetDailyAgendaQueryHandler : IRequestHandler<GetDailyAgendaQ
 {
     private readonly IAppDbContext _db;
     private readonly ICurrentUser _current;
+    private readonly IPropertyFeatureService _features;
 
-    public GetDailyAgendaQueryHandler(IAppDbContext db, ICurrentUser current)
+    public GetDailyAgendaQueryHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features)
     {
         _db = db;
         _current = current;
+        _features = features;
     }
 
     public async Task<AppResult<DailyAgendaDto>> Handle(GetDailyAgendaQuery request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Agenda, ct))
+            return AppResult<DailyAgendaDto>.Fail("feature_disabled", "La agenda está desactivada para este hospedaje.");
+
         var from = request.Date;
         var to7 = request.Date.AddDays(7);
 

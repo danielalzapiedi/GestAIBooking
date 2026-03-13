@@ -15,6 +15,7 @@ public class AppDbContext : IdentityDbContext<User>, IAppDbContext
     public DbSet<AccountSubscriptionPlan> AccountSubscriptionPlans => Set<AccountSubscriptionPlan>();
     public DbSet<SaasPlanDefinition> SaasPlanDefinitions => Set<SaasPlanDefinition>();
     public DbSet<Property> Properties => Set<Property>();
+    public DbSet<PropertyFeatureSettings> PropertyFeatureSettings => Set<PropertyFeatureSettings>();
     public DbSet<Unit> Units => Set<Unit>();
     public DbSet<Guest> Guests => Set<Guest>();
     public DbSet<Booking> Bookings => Set<Booking>();

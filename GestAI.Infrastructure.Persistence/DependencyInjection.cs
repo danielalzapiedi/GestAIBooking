@@ -10,7 +10,7 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddPersistence(this IServiceCollection services, IConfiguration config)
     {
-        var cs = config.GetConnectionString("DefaultConnection") ?? "Server=localhost;Database=GestAIBookingDb14;Trusted_Connection=True;TrustServerCertificate=True";
+        var cs = config.GetConnectionString("DefaultConnection") ?? "Server=localhost;Database=GestAIBookingDb;Trusted_Connection=True;TrustServerCertificate=True";
         services.AddDbContext<AppDbContext>(opt =>
         {
             opt.UseSqlServer(cs);

@@ -40,6 +40,11 @@ public sealed class PropertyConfiguration : IEntityTypeConfiguration<Property>
             .HasForeignKey(x => x.AccountId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        b.HasOne(x => x.FeatureSettings)
+            .WithOne(x => x.Property)
+            .HasForeignKey<PropertyFeatureSettings>(x => x.PropertyId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         b.HasIndex(x => new { x.AccountId, x.Name }).IsUnique();
         b.HasIndex(x => x.PublicSlug).IsUnique().HasFilter("[PublicSlug] IS NOT NULL");
     }

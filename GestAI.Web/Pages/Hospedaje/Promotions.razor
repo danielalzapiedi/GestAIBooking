@@ -2,9 +2,21 @@
 @using GestAI.Web.Dtos
 @inject ApiClient Api
 @inject NavigationManager Nav
+@inject GestAI.Web.Service.PropertyFeatureState FeatureState
 
 <PageTitle>Promociones</PageTitle>
 
+@if (!_featureChecked)
+{
+    <EmptyState Title="Cargando configuración" Description="Estamos validando las funciones habilitadas para este hospedaje." Icon="bi-hourglass-split" />
+}
+else if (!_promotionsEnabled)
+{
+    <EmptyState Title="Funcionalidad desactivada" Description="Las promociones están desactivadas para este hospedaje." Icon="bi-toggle-off" />
+    <button class="btn btn-outline-primary" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>Ir al dashboard</button>
+}
+else
+{
 <div class="pagetitle d-flex justify-content-between align-items-center">
     <div>
         <h1>Promociones y reglas</h1>
@@ -100,8 +112,12 @@
     </div>
 </div>
 
+}
+
 @code {
     [Parameter] public int PropertyId { get; set; }
+    private bool _featureChecked;
+    private bool _promotionsEnabled = true;
     private List<PromotionDto> _items = new();
     private List<UnitListItemDto> _units = new();
     private string? _search;
@@ -133,6 +149,12 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        var settings = await FeatureState.EnsureAsync(PropertyId);
+        _promotionsEnabled = settings?.EnablePromotions ?? true;
+        _featureChecked = true;
+        if (!_promotionsEnabled)
+            return;
+
         _units = (await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units"))?.Data ?? new();
         await Load();
     }

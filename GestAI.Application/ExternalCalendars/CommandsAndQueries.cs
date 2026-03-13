@@ -51,18 +51,23 @@ public sealed class ExternalCalendarHandler :
     private readonly IAuditService _audit;
     private readonly IExternalCalendarSyncService _syncService;
     private readonly IIcsCalendarService _icsService;
+    private readonly IPropertyFeatureService _features;
 
-    public ExternalCalendarHandler(IAppDbContext db, ICurrentUser current, IAuditService audit, IExternalCalendarSyncService syncService, IIcsCalendarService icsService)
+    public ExternalCalendarHandler(IAppDbContext db, ICurrentUser current, IAuditService audit, IExternalCalendarSyncService syncService, IIcsCalendarService icsService, IPropertyFeatureService features)
     {
         _db = db;
         _current = current;
         _audit = audit;
         _syncService = syncService;
         _icsService = icsService;
+        _features = features;
     }
 
     public async Task<AppResult<int>> Handle(UpsertExternalCalendarConnectionCommand request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.ExternalCalendarSync, ct))
+            return AppResult<int>.Fail("feature_disabled", "La sincronización externa está desactivada para este hospedaje.");
+
         var property = await _db.Properties.AsNoTracking().FirstOrDefaultAsync(p => p.Id == request.PropertyId && (p.Account.OwnerUserId == _current.UserId || p.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)), ct);
         if (property is null)
             return AppResult<int>.Fail("forbidden", "Hospedaje inválido o sin acceso.");
@@ -114,6 +119,9 @@ public sealed class ExternalCalendarHandler :
 
     public async Task<AppResult> Handle(DeleteExternalCalendarConnectionCommand request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.ExternalCalendarSync, ct))
+            return AppResult.Fail("feature_disabled", "La sincronización externa está desactivada para este hospedaje.");
+
         var entity = await _db.ExternalChannelConnections.Include(x => x.Property).FirstOrDefaultAsync(x => x.Id == request.ConnectionId && x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)), ct);
         if (entity is null)
             return AppResult.Fail("not_found", "Conexión no encontrada.");
@@ -127,6 +135,9 @@ public sealed class ExternalCalendarHandler :
 
     public async Task<AppResult<List<ExternalCalendarConnectionDto>>> Handle(GetExternalCalendarConnectionsQuery request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.ExternalCalendarSync, ct))
+            return AppResult<List<ExternalCalendarConnectionDto>>.Fail("feature_disabled", "La sincronización externa está desactivada para este hospedaje.");
+
         var query = _db.ExternalChannelConnections.AsNoTracking()
             .Where(x => x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)));
         if (request.UnitId.HasValue)
@@ -140,6 +151,9 @@ public sealed class ExternalCalendarHandler :
 
     public async Task<AppResult<List<ExternalCalendarEventDto>>> Handle(GetExternalCalendarEventsByRangeQuery request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.ExternalCalendarSync, ct))
+            return AppResult<List<ExternalCalendarEventDto>>.Fail("feature_disabled", "La sincronización externa está desactivada para este hospedaje.");
+
         var query = _db.ExternalCalendarEvents.AsNoTracking()
             .Where(x => x.PropertyId == request.PropertyId && !x.IsCancelled)
             .Where(x => x.StartDate < request.To && request.From < x.EndDate)
@@ -156,6 +170,9 @@ public sealed class ExternalCalendarHandler :
 
     public async Task<AppResult<List<ExternalSyncLogDto>>> Handle(GetExternalSyncLogsQuery request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.ExternalCalendarSync, ct))
+            return AppResult<List<ExternalSyncLogDto>>.Fail("feature_disabled", "La sincronización externa está desactivada para este hospedaje.");
+
         var query = _db.ExternalSyncLogs.AsNoTracking()
             .Where(x => x.PropertyId == request.PropertyId)
             .Where(x => x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive));
@@ -170,6 +187,9 @@ public sealed class ExternalCalendarHandler :
 
     public async Task<AppResult<ExternalSyncLogDto>> Handle(SyncExternalCalendarConnectionCommand request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.ExternalCalendarSync, ct))
+            return AppResult<ExternalSyncLogDto>.Fail("feature_disabled", "La sincronización externa está desactivada para este hospedaje.");
+
         var connection = await _db.ExternalChannelConnections.AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == request.ConnectionId && x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)), ct);
         if (connection is null)

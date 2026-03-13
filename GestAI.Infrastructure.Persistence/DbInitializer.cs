@@ -60,6 +60,11 @@ public static class DbInitializer
             };
             db.Properties.Add(prop); await db.SaveChangesAsync(ct);
         }
+        if (!await db.PropertyFeatureSettings.AnyAsync(x => x.PropertyId == prop.Id, ct))
+        {
+            db.PropertyFeatureSettings.Add(new PropertyFeatureSettings { PropertyId = prop.Id });
+            await db.SaveChangesAsync(ct);
+        }
         var existingUnits = await db.Units.Where(u => u.PropertyId == prop.Id).OrderBy(u => u.Id).ToListAsync(ct);
         if (existingUnits.Count == 0)
         {

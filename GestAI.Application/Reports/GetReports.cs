@@ -12,15 +12,20 @@ public sealed class GetReportsQueryHandler : IRequestHandler<GetReportsQuery, Ap
 {
     private readonly IAppDbContext _db;
     private readonly ICurrentUser _current;
+    private readonly IPropertyFeatureService _features;
 
-    public GetReportsQueryHandler(IAppDbContext db, ICurrentUser current)
+    public GetReportsQueryHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features)
     {
         _db = db;
         _current = current;
+        _features = features;
     }
 
     public async Task<AppResult<ReportsDto>> Handle(GetReportsQuery request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Reports, ct))
+            return AppResult<ReportsDto>.Fail("feature_disabled", "Los reportes están desactivados para este hospedaje.");
+
         var propertyAccess = _db.Properties.AsNoTracking()
             .Where(p => p.Id == request.PropertyId && (p.Account.OwnerUserId == _current.UserId || p.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)));
 

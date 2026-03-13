@@ -1,5 +1,6 @@
 @page "/guests/{PropertyId:int}"
 @inject ApiClient Api
+@inject GestAI.Web.Service.PropertyFeatureState FeatureState
 @using GestAI.Web.Dtos
 
 <div class="pagetitle">
@@ -9,7 +10,7 @@
 <div class="row g-2 align-items-end mb-3">
     <div class="col-12 col-md-6">
         <label class="form-label">Buscar</label>
-        <input class="form-control" value="@_search" @oninput="OnSearchInput" placeholder="Nombre / Teléfono / Email" />
+        <input class="form-control" value="@_search" @oninput="OnSearchInput" placeholder="@(_simpleGuestMode ? "Nombre o teléfono" : "Nombre / Teléfono / Email")" />
     </div>
     <div class="col-12 col-md-6 text-md-end">
         <button class="btn btn-primary" @onclick="NewGuest"><i class="bi bi-plus"></i> Nuevo huésped</button>
@@ -34,8 +35,11 @@ else
                     <tr>
                         <th>Nombre</th>
                         <th>Teléfono</th>
-                        <th>Email</th>
-                        <th>Documento</th>
+                        @if (!_simpleGuestMode)
+                        {
+                            <th>Email</th>
+                            <th>Documento</th>
+                        }
                         <th style="width:140px;"></th>
                     </tr>
                 </thead>
@@ -45,8 +49,11 @@ else
                         <tr>
                             <td>@g.FullName</td>
                             <td>@g.Phone</td>
-                            <td>@g.Email</td>
-                            <td>@g.DocumentNumber</td>
+                            @if (!_simpleGuestMode)
+                            {
+                                <td>@g.Email</td>
+                                <td>@g.DocumentNumber</td>
+                            }
                             <td class="text-end">
                                 <button class="btn btn-sm btn-outline-secondary me-1" @onclick="(()=>EditGuest(g))"><i class="bi bi-pencil"></i></button>
                                 <button class="btn btn-sm btn-outline-danger" @onclick="(()=>DeleteGuest(g))"><i class="bi bi-trash"></i></button>
@@ -86,18 +93,21 @@ else
                             <label class="form-label">Email</label>
                             <input class="form-control" @bind="_editing!.Email" />
                         </div>
-                        <div class="col-12 col-md-6">
-                            <label class="form-label">Tipo doc (int)</label>
-                            <input class="form-control" type="number" @bind="_editing!.DocumentType" />
-                        </div>
-                        <div class="col-12 col-md-6">
-                            <label class="form-label">Nro doc</label>
-                            <input class="form-control" @bind="_editing!.DocumentNumber" />
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">Notas</label>
-                            <textarea class="form-control" rows="3" @bind="_editing!.Notes"></textarea>
-                        </div>
+@if (!_simpleGuestMode)
+                        {
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">Tipo doc (int)</label>
+                                <input class="form-control" type="number" @bind="_editing!.DocumentType" />
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">Nro doc</label>
+                                <input class="form-control" @bind="_editing!.DocumentNumber" />
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Notas</label>
+                                <textarea class="form-control" rows="3" @bind="_editing!.Notes"></textarea>
+                            </div>
+                        }
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -117,6 +127,7 @@ else
     private List<GuestDto>? _guests;
 
     private bool _modalOpen;
+    private bool _simpleGuestMode;
     private GuestEditModel? _editing;
     private string? _error;
 
@@ -134,6 +145,8 @@ else
     private async Task Load()
     {
         _loaded = false;
+        var settings = await FeatureState.EnsureAsync(PropertyId);
+        _simpleGuestMode = settings?.UseSimpleGuestMode == true;
         var res = await Api.GetAsync<AppResult<List<GuestDto>>>($"api/properties/{PropertyId}/guests?search={Uri.EscapeDataString(_search)}");
         _guests = res?.Data;
         _loaded = true;

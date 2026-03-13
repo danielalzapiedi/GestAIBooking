@@ -12,15 +12,20 @@ public sealed class CompleteOperationalTaskCommandHandler : IRequestHandler<Comp
 {
     private readonly IAppDbContext _db;
     private readonly ICurrentUser _current;
+    private readonly IPropertyFeatureService _features;
 
-    public CompleteOperationalTaskCommandHandler(IAppDbContext db, ICurrentUser current)
+    public CompleteOperationalTaskCommandHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features)
     {
         _db = db;
         _current = current;
+        _features = features;
     }
 
     public async Task<AppResult> Handle(CompleteOperationalTaskCommand request, CancellationToken ct)
     {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Housekeeping, ct))
+            return AppResult.Fail("feature_disabled", "Housekeeping está desactivado para este hospedaje.");
+
         var task = await _db.OperationalTasks.Include(x => x.Unit).FirstOrDefaultAsync(x => x.Id == request.TaskId && x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)), ct);
         if (task is null)
             return AppResult.Fail("not_found", "Tarea no encontrada.");

@@ -98,6 +98,10 @@ public sealed class UpsertPropertyCommandHandler : IRequestHandler<UpsertPropert
                 IsActive = request.IsActive
             };
             _db.Properties.Add(property);
+            _db.PropertyFeatureSettings.Add(new PropertyFeatureSettings
+            {
+                Property = property
+            });
         }
         else
         {
