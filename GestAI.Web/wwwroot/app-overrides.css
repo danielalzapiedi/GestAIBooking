@@ -53,6 +53,7 @@ textarea {
 
 body {
     font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+    line-height: 1.45;
 }
 
 :focus-visible {
@@ -74,6 +75,13 @@ a:hover {
 
 .pagetitle {
     margin-bottom: 1.65rem;
+}
+
+.pagetitle + .row,
+.pagetitle + .card,
+.pagetitle + .calendar-shell,
+.pagetitle + .ui-toolbar {
+    margin-top: .45rem;
 }
 
 .pagetitle h1 {
@@ -141,6 +149,11 @@ h6 {
     font-weight: 760;
     letter-spacing: -0.01em;
     color: #1f1f22;
+}
+
+h4 {
+    font-weight: 760;
+    letter-spacing: -0.01em;
 }
 
 .form-label {
@@ -313,6 +326,10 @@ textarea.form-control {
     font-weight: 700;
 }
 
+.table tbody tr + tr td {
+    border-top-color: #f0f3f7;
+}
+
 .ui-badge {
     display: inline-flex;
     align-items: center;
@@ -389,6 +406,10 @@ textarea.form-control {
     text-align: center;
 }
 
+.ui-loading-spinner {
+    color: var(--ui-primary);
+}
+
 .ui-toast-stack {
     position: fixed;
     top: 86px;
@@ -461,6 +482,10 @@ textarea.form-control {
 .app-sidebar .sidebar-nav .nav-content a i {
     color: #9aa4b2;
     background: transparent !important;
+}
+
+.app-sidebar .sidebar-nav .nav-link.collapsed i {
+    color: #98a2b3;
 }
 
 .app-sidebar-property {
@@ -542,6 +567,10 @@ textarea.form-control {
     border-radius: 12px;
     margin: 0 .35rem;
     padding: .55rem .7rem .55rem .85rem;
+}
+
+.app-sidebar .sidebar-nav .nav-item {
+    margin-bottom: .35rem;
 }
 
 .app-sidebar .sidebar-nav .nav-content a.active i,
@@ -734,6 +763,16 @@ textarea.form-control {
 .d-flex.gap-2,
 .d-flex.gap-2.flex-wrap {
     row-gap: .6rem;
+}
+
+.ui-toolbar,
+.calendar-toolbar {
+    margin-bottom: 1.25rem;
+}
+
+.card + .card,
+.table-responsive + .table-responsive {
+    margin-top: .85rem;
 }
 
 .calendar-timeline-modern .range-bar.booking-confirmed { background: #ff5575; color: #fff; border-color: #e43a60; }
