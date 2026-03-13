@@ -204,7 +204,7 @@
 @code {
     [Parameter] public int PropertyId { get; set; }
 
-    private const decimal DayWidth = 64m;
+    private const int MinBarWidthPx = 18;
     private bool _loaded;
     private List<UnitListItemDto> _units = new();
     private List<CalendarBookingDto> _bookings = new();
@@ -285,13 +285,12 @@
         if (endExclusive <= _from || start >= _toExclusive || endExclusive <= start)
             return null;
 
-        var left = (_rangeDays.IndexOf(start) * DayWidth) + (booking.CheckInDate >= _from ? DayWidth * 0.25m : 4m);
-        var width = (((decimal)(endExclusive.DayNumber - start.DayNumber)) * DayWidth)
-            - (booking.CheckInDate >= _from ? DayWidth * 0.25m : 4m)
-            - (booking.CheckOutDate <= _toExclusive ? DayWidth * 0.75m : 4m);
-
-        if (width < 18m)
-            width = 18m;
+        var startIndex = _rangeDays.IndexOf(start);
+        var lengthDays = endExclusive.DayNumber - start.DayNumber;
+        var leftOffsetPx = booking.CheckInDate >= _from ? 16 : 4;
+        var checkoutVisualTailPx = booking.CheckOutDate <= _toExclusive ? 16 : -4;
+        var left = $"calc(({startIndex} * var(--calendar-day-width)) + {leftOffsetPx}px)";
+        var width = $"max({MinBarWidthPx}px, calc(({lengthDays} * var(--calendar-day-width)) - {leftOffsetPx}px + {checkoutVisualTailPx}px))";
 
         return new RangeBar
         {
@@ -300,7 +299,7 @@
             Title = $"{booking.GuestName} · {booking.BookingCode}",
             Tooltip = $"{booking.GuestName} | {booking.CheckInDate:dd/MM} - {booking.CheckOutDate:dd/MM} | Total {booking.TotalAmount:0.00} | Saldo {booking.PendingAmount:0.00} | Estado {StatusLabel(booking.Status)}",
             CssClass = BookingCssClass(booking.Status),
-            Style = $"left:{left}px;width:{width}px;",
+            Style = $"left:{left};width:{width};",
         };
     }
 
@@ -312,10 +311,10 @@
         if (endExclusive <= _from || start >= _toExclusive || endExclusive <= start)
             return null;
 
-        var left = (_rangeDays.IndexOf(start) * DayWidth) + 6m;
-        var width = (((decimal)(endExclusive.DayNumber - start.DayNumber)) * DayWidth) - 12m;
-        if (width < 18m)
-            width = 18m;
+        var startIndex = _rangeDays.IndexOf(start);
+        var lengthDays = endExclusive.DayNumber - start.DayNumber;
+        var left = $"calc(({startIndex} * var(--calendar-day-width)) + 6px)";
+        var width = $"max({MinBarWidthPx}px, calc(({lengthDays} * var(--calendar-day-width)) - 12px))";
 
         var label = externalEvent.SourceChannel switch
         {
@@ -330,7 +329,7 @@
             Title = string.IsNullOrWhiteSpace(externalEvent.Summary) ? label : externalEvent.Summary!,
             Tooltip = $"{label} | {externalEvent.StartDate:dd/MM} - {externalEvent.EndDate:dd/MM} | {externalEvent.Summary}",
             CssClass = externalEvent.SourceChannel == ExternalChannelType.Booking ? "external-booking-bar" : externalEvent.SourceChannel == ExternalChannelType.Airbnb ? "external-airbnb-bar" : "external-other-bar",
-            Style = $"left:{left}px;width:{width}px;",
+            Style = $"left:{left};width:{width};",
         };
     }
 
@@ -341,10 +340,10 @@
         if (endExclusive <= _from || start >= _toExclusive || endExclusive <= start)
             return null;
 
-        var left = (_rangeDays.IndexOf(start) * DayWidth) + 4m;
-        var width = (((decimal)(endExclusive.DayNumber - start.DayNumber)) * DayWidth) - 8m;
-        if (width < 18m)
-            width = 18m;
+        var startIndex = _rangeDays.IndexOf(start);
+        var lengthDays = endExclusive.DayNumber - start.DayNumber;
+        var left = $"calc(({startIndex} * var(--calendar-day-width)) + 4px)";
+        var width = $"max({MinBarWidthPx}px, calc(({lengthDays} * var(--calendar-day-width)) - 8px))";
 
         return new RangeBar
         {
@@ -352,7 +351,7 @@
             Title = string.IsNullOrWhiteSpace(blocked.Reason) ? "Bloqueo" : blocked.Reason!,
             Tooltip = $"Bloqueado | {blocked.DateFrom:dd/MM} - {blocked.DateTo:dd/MM} | {blocked.Reason}",
             CssClass = "blocked-bar",
-            Style = $"left:{left}px;width:{width}px;",
+            Style = $"left:{left};width:{width};",
         };
     }
 

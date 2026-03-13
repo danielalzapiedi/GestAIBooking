@@ -1,11 +1,17 @@
 @using System.Globalization
 
-<span class="badge rounded-pill @CssClass">@Label</span>
+<span class="@ResolvedClass">@Label</span>
 
 @code {
     [Parameter] public string? Text { get; set; }
     [Parameter] public bool? IsActive { get; set; }
     [Parameter] public string? CssClass { get; set; }
+
+    private string ResolvedClass => string.IsNullOrWhiteSpace(CssClass)
+        ? "ui-badge ui-badge-neutral"
+        : CssClass.Contains("ui-badge", StringComparison.OrdinalIgnoreCase)
+            ? CssClass
+            : $"ui-badge {CssClass}";
 
     private string Label => !string.IsNullOrWhiteSpace(Text)
         ? Translate(Text!)
