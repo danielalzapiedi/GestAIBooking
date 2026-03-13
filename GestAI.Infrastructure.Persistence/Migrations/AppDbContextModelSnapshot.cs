@@ -1167,9 +1167,6 @@ namespace GestAI.Infrastructure.Persistence.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("datetime2");
-
                     b.Property<bool>("EnableAdvancedRates")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
@@ -1234,10 +1231,8 @@ namespace GestAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("int");
 
                     b.Property<byte[]>("RowVersion")
-                        .IsConcurrencyToken()
                         .IsRequired()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("rowversion");
+                        .HasColumnType("varbinary(max)");
 
                     b.Property<bool>("UseSimpleGuestMode")
                         .ValueGeneratedOnAdd()
@@ -2249,7 +2244,8 @@ namespace GestAI.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("GestAI.Domain.Entities.Property", b =>
                 {
-                    b.Navigation("FeatureSettings");
+                    b.Navigation("FeatureSettings")
+                        .IsRequired();
 
                     b.Navigation("MessageTemplates");
 

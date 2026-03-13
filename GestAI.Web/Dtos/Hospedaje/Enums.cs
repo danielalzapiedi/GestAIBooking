@@ -17,6 +17,7 @@ public enum BookingSource
     Booking = 2,
     Airbnb = 3,
     Phone = 4,
+    WalkIn = 5,
     Other = 99
 }
 
