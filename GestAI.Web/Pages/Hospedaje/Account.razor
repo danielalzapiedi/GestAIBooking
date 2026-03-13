@@ -1,4 +1,5 @@
 @page "/account"
+@implements IDisposable
 @inject ApiClient Api
 @inject GestAI.Web.Service.PropertyFeatureState FeatureState
 @using GestAI.Web.Dtos
@@ -155,6 +156,12 @@ else
     private string _auditToStr => _auditTo?.ToString("yyyy-MM-dd") ?? string.Empty;
     private readonly string[] _availableEntities = ["Booking", "Payment", "RatePlan", "Promotion", "AccountUser", "Property", "Unit", "Account"];
     private bool _auditViewEnabled = true;
+    private int? _auditFeaturePropertyId;
+
+    protected override void OnInitialized()
+    {
+        FeatureState.FeaturesChanged += OnFeaturesChanged;
+    }
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
@@ -173,16 +180,50 @@ else
 
     private async Task ResolveAuditFeatureAsync()
     {
-        var access = await Api.GetAsync<AppResult<CurrentUserAccessDto>>("api/saas/me/access");
-        var propertyId = access?.Data?.DefaultPropertyId;
+        var propertyId = FeatureState.CurrentPropertyId;
         if (!propertyId.HasValue)
         {
             _auditViewEnabled = true;
+            _auditFeaturePropertyId = null;
             return;
         }
 
-        var settings = await FeatureState.EnsureAsync(propertyId.Value);
+        var settings = FeatureState.Current ?? await FeatureState.EnsureAsync(propertyId.Value);
         _auditViewEnabled = settings?.EnableAuditView ?? true;
+        _auditFeaturePropertyId = propertyId;
+    }
+
+    private void OnFeaturesChanged()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            var before = _auditFeaturePropertyId;
+            var beforeEnabled = _auditViewEnabled;
+
+            await ResolveAuditFeatureAsync();
+
+            if (!_loaded)
+            {
+                StateHasChanged();
+                return;
+            }
+
+            if (_auditViewEnabled && (!beforeEnabled || before != _auditFeaturePropertyId))
+            {
+                await LoadAudit();
+            }
+            else if (!_auditViewEnabled)
+            {
+                _audit = new();
+            }
+
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        FeatureState.FeaturesChanged -= OnFeaturesChanged;
     }
 
     private async Task LoadAudit()
