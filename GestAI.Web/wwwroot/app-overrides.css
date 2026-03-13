@@ -69,7 +69,7 @@ a:hover {
 }
 
 .pagetitle {
-    margin-bottom: 1.45rem;
+    margin-bottom: 1.65rem;
 }
 
 .pagetitle h1 {
@@ -116,7 +116,15 @@ a:hover {
 }
 
 .card .card-body {
-    padding: 1.25rem 1.25rem 1.35rem;
+    padding: 1.35rem 1.35rem 1.45rem;
+}
+
+.row.g-3 {
+    --bs-gutter-y: 1.15rem;
+}
+
+.row.g-4 {
+    --bs-gutter-y: 1.35rem;
 }
 
 .card .card-title,
@@ -194,6 +202,64 @@ textarea.form-control {
 .btn-primary:active {
     background: linear-gradient(135deg, #ff4e70 0%, #d71052 100%) !important;
     color: #fff;
+}
+
+.btn-success,
+.btn-warning,
+.btn-info,
+.btn-secondary,
+.btn-dark,
+.btn-outline-success,
+.btn-outline-warning,
+.btn-outline-info,
+.btn-outline-dark,
+.btn-outline-secondary {
+    background: #fff;
+    color: #344054;
+    border-color: var(--ui-border-strong);
+    box-shadow: none;
+}
+
+.btn-success:hover,
+.btn-warning:hover,
+.btn-info:hover,
+.btn-secondary:hover,
+.btn-dark:hover,
+.btn-outline-success:hover,
+.btn-outline-warning:hover,
+.btn-outline-info:hover,
+.btn-outline-dark:hover,
+.btn-outline-secondary:hover {
+    background: #f8fafc;
+    border-color: #cfd8e3;
+    color: #1f2937;
+}
+
+.bg-primary,
+.bg-info,
+.bg-secondary,
+.bg-dark,
+.bg-success,
+.bg-warning {
+    background-color: #fff1f5 !important;
+    color: #b4234d !important;
+}
+
+.text-primary,
+.text-info,
+.text-warning,
+.text-success {
+    color: #b4234d !important;
+}
+
+.bg-primary-subtle,
+.bg-info-subtle,
+.bg-success-subtle,
+.bg-warning-subtle,
+.bg-secondary-subtle,
+.bg-dark-subtle {
+    background: #fff4f7 !important;
+    color: #b4234d !important;
 }
 
 .btn-outline-primary,
@@ -382,6 +448,7 @@ textarea.form-control {
 .app-sidebar .sidebar-nav .nav-link i,
 .app-sidebar .sidebar-nav .nav-content a i {
     color: #9aa4b2;
+    background: transparent !important;
 }
 
 .app-sidebar-property {
@@ -456,6 +523,12 @@ textarea.form-control {
 .app-sidebar .sidebar-nav .nav-content a {
     border-radius: 12px;
     margin: 0 .35rem;
+    padding: .55rem .7rem .55rem .85rem;
+}
+
+.app-sidebar .sidebar-nav .nav-content a.active i,
+.app-sidebar .sidebar-nav .nav-content a:hover i {
+    background-color: transparent !important;
 }
 
 .kpi-card::after { background: rgba(255, 56, 92, .08); }
@@ -498,7 +571,6 @@ textarea.form-control {
     background: #fff;
 }
 
-.calendar-timeline-modern .resources-header,
 .calendar-timeline-modern .resources-header {
     background: #fff !important;
     color: #1f2937;
@@ -580,6 +652,7 @@ textarea.form-control {
     position: relative;
     min-height: 74px;
     border-bottom: 1px solid #eef2f6;
+    overflow: hidden;
 }
 
 .calendar-timeline-modern .grid-row .cell {
@@ -609,6 +682,7 @@ textarea.form-control {
     border: 1px solid transparent;
     overflow: hidden;
     cursor: pointer;
+    z-index: 2;
 }
 
 .calendar-timeline-modern .range-bar .range-title {
@@ -623,12 +697,25 @@ textarea.form-control {
     filter: brightness(.98);
 }
 
-.calendar-timeline-modern .range-bar.booking-confirmed,
-.booking-bar.confirmed { background: #ff5575; color: #fff; border-color: #e43a60; }
-.calendar-timeline-modern .range-bar.booking-tentative,
-.booking-bar.tentative { background: #fff3d6; color: #815609; border-color: #f1ddaa; }
-.calendar-timeline-modern .range-bar.booking-cancelled,
-.booking-bar.cancelled { background: #f8e5ec; color: #8e3451; border-color: #efc4d4; }
+.calendar-toolbar {
+    margin-bottom: 1.2rem;
+}
+
+.calendar-filters {
+    background: #fff;
+    border: 1px solid var(--ui-border);
+    border-radius: 18px;
+    padding: 1rem 1.05rem;
+    margin-bottom: 1rem;
+}
+
+.calendar-shell > .card {
+    margin-top: .25rem;
+}
+
+.calendar-timeline-modern .range-bar.booking-confirmed { background: #ff5575; color: #fff; border-color: #e43a60; }
+.calendar-timeline-modern .range-bar.booking-tentative { background: #fff3d6; color: #815609; border-color: #f1ddaa; }
+.calendar-timeline-modern .range-bar.booking-cancelled { background: #f8e5ec; color: #8e3451; border-color: #efc4d4; }
 .calendar-timeline-modern .range-bar.booking-checkedin { background: #ffe4ed; color: #a91c4a; border-color: #f5c6d6; }
 .calendar-timeline-modern .range-bar.booking-checkedout { background: #f1f0f3; color: #635c66; border-color: #e3dfe6; }
 .calendar-timeline-modern .range-bar.booking-inquiry { background: #f5edff; color: #5b2b9e; border-color: #e1cffd; }
@@ -705,12 +792,8 @@ textarea.form-control {
     .app-property-switcher { min-width: 0; }
 
     .calendar-timeline-modern {
+        --calendar-day-width: 58px;
         grid-template-columns: 186px 1fr;
-    }
-
-    .calendar-timeline-modern .grid-header,
-    .calendar-timeline-modern .grid-row {
-        grid-auto-columns: minmax(58px, 58px);
     }
 }
 
