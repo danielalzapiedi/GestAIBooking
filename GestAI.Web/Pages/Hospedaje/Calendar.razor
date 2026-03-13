@@ -288,9 +288,9 @@
         var startIndex = _rangeDays.IndexOf(start);
         var lengthDays = endExclusive.DayNumber - start.DayNumber;
         var leftOffsetPx = booking.CheckInDate >= _from ? 16 : 4;
-        var rightOffsetPx = booking.CheckOutDate <= _toExclusive ? 48 : 4;
+        var checkoutVisualTailPx = booking.CheckOutDate <= _toExclusive ? 16 : -4;
         var left = $"calc(({startIndex} * var(--calendar-day-width)) + {leftOffsetPx}px)";
-        var width = $"max({MinBarWidthPx}px, calc(({lengthDays} * var(--calendar-day-width)) - {leftOffsetPx + rightOffsetPx}px))";
+        var width = $"max({MinBarWidthPx}px, calc(({lengthDays} * var(--calendar-day-width)) - {leftOffsetPx}px + {checkoutVisualTailPx}px))";
 
         return new RangeBar
         {
