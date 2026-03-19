@@ -1,6 +1,5 @@
 @page "/properties/{PropertyId:int}/features"
 @using GestAI.Web.Dtos
-@using GestAI.Web.Helpers
 @inject ApiClient Api
 @inject GestAI.Web.Service.PropertyFeatureState FeatureState
 
@@ -9,7 +8,7 @@
 <div class="pagetitle d-flex justify-content-between align-items-center">
     <div>
         <h1>Configuración funcional</h1>
-        <p class="text-muted mb-0">Activá o desactivá módulos del sistema para este hospedaje.</p>
+        <p class="text-muted mb-0">Activá o desactivá features del hospedaje sin romper dependencias con el plan contratado.</p>
     </div>
     <button class="btn btn-primary" @onclick="Save">Guardar cambios</button>
 </div>
@@ -50,15 +49,10 @@ else
 @code {
     [Parameter] public int PropertyId { get; set; }
     private PropertyFeatureSettingsDto? _settings;
-    private CurrentUserAccessDto? _access;
     private string? _message;
 
     protected override async Task OnParametersSetAsync()
-    {
-        _settings = await FeatureState.EnsureAsync(PropertyId);
-        var access = await Api.GetAsync<AppResult<CurrentUserAccessDto>>("api/saas/me/access");
-        _access = access?.Success == true ? access.Data : null;
-    }
+        => _settings = await FeatureState.EnsureAsync(PropertyId);
 
     private IReadOnlyList<(string Title, List<(string Label, string Description, string? Helper, bool Disabled, Func<bool> Getter, Action<bool> Setter)> Items)> Groups
         => _settings is null
@@ -106,33 +100,19 @@ else
     }
 
     private bool IsModuleGovernedFeatureDisabled(string featureKey)
-    {
-        var requiredModule = PropertyFeatureModulePolicy.GetRequiredModule(featureKey);
-        return requiredModule.HasValue && !HasModule(requiredModule.Value);
-    }
+        => GetModuleAvailability(featureKey) is { AvailableByPlan: false };
 
     private string? GetModuleHelper(string featureKey)
     {
-        var requiredModule = PropertyFeatureModulePolicy.GetRequiredModule(featureKey);
-        if (!requiredModule.HasValue || HasModule(requiredModule.Value))
+        var requirement = GetModuleAvailability(featureKey);
+        if (requirement is null || requirement.AvailableByPlan)
             return null;
 
-        return $"Requiere acceso habilitado al módulo {GetModuleLabel(requiredModule.Value)} para esta cuenta.";
+        return $"Requiere que la cuenta tenga disponible el módulo {requirement.ModuleLabel} en el plan actual.";
     }
 
-    private bool HasModule(SaasModule module)
-        => _access?.Modules?.Any(x => x.Module == module && x.Allowed) ?? false;
-
-    private static string GetModuleLabel(SaasModule module)
-        => module switch
-        {
-            SaasModule.Rates => "Tarifas",
-            SaasModule.Promotions => "Promociones",
-            SaasModule.Payments => "Pagos",
-            SaasModule.Housekeeping => "Housekeeping",
-            SaasModule.Reports => "Reportes",
-            _ => module.ToString()
-        };
+    private PropertyFeatureModuleAvailabilityDto? GetModuleAvailability(string featureKey)
+        => _settings?.ModuleAvailability?.FirstOrDefault(x => x.FeatureKey == featureKey);
 
     private async Task Save()
     {
@@ -160,7 +140,7 @@ else
         {
             _settings = res.Data;
             await FeatureState.RefreshAsync(PropertyId);
-            _message = "Configuración funcional actualizada. Los cambios ya fueron aplicados en la navegación y módulos del hospedaje.";
+            _message = "Configuración funcional actualizada. La UI y las validaciones del hospedaje ya reflejan el nuevo estado.";
         }
         else
         {
