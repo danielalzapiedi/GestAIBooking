@@ -23,12 +23,14 @@ public sealed class DeletePaymentCommandHandler : IRequestHandler<DeletePaymentC
 {
     private readonly IAppDbContext _db;
     private readonly ICurrentUser _current;
+    private readonly IUserAccessService _access;
     private readonly IPropertyFeatureService _features;
 
-    public DeletePaymentCommandHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features)
+    public DeletePaymentCommandHandler(IAppDbContext db, ICurrentUser current, IUserAccessService access, IPropertyFeatureService features)
     {
         _db = db;
         _current = current;
+        _access = access;
         _features = features;
     }
 
@@ -36,6 +38,13 @@ public sealed class DeletePaymentCommandHandler : IRequestHandler<DeletePaymentC
     {
         if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Payments, ct))
             return AppResult.Fail("feature_disabled", "La gestión de pagos está desactivada para este hospedaje.");
+
+        var property = await PropertyAuthorization.GetAccessiblePropertyAsync(_db, _current, request.PropertyId, ct);
+        if (property is null)
+            return AppResult.Fail("forbidden", "Hospedaje inválido o sin acceso.");
+
+        if (!await _access.HasModuleAccessAsync(property.AccountId, SaasModule.Payments, ct))
+            return AppResult.Fail("forbidden", "No tenés permisos para usar el módulo de pagos.");
 
         var payment = await _db.Payments
             .FirstOrDefaultAsync(p => p.PropertyId == request.PropertyId && p.Id == request.PaymentId && p.Property.Account.OwnerUserId == _current.UserId, ct);

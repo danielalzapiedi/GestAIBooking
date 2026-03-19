@@ -60,10 +60,7 @@ public sealed class PropertyFeatureSettingsHandler :
 
     public async Task<AppResult<PropertyFeatureSettingsDto>> Handle(GetPropertyFeatureSettingsQuery request, CancellationToken ct)
     {
-        var property = await _db.Properties.AsNoTracking()
-            .Where(x => x.Id == request.PropertyId && (x.Account.OwnerUserId == _current.UserId || x.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)))
-            .Select(x => new { x.Id, x.AccountId })
-            .FirstOrDefaultAsync(ct);
+        var property = await PropertyAuthorization.GetAccessiblePropertyAsync(_db, _current, request.PropertyId, ct);
 
         if (property is null)
             return AppResult<PropertyFeatureSettingsDto>.Fail("forbidden", "Hospedaje inválido o sin acceso.");
@@ -74,10 +71,7 @@ public sealed class PropertyFeatureSettingsHandler :
 
     public async Task<AppResult<PropertyFeatureSettingsDto>> Handle(UpdatePropertyFeatureSettingsCommand request, CancellationToken ct)
     {
-        var property = await _db.Properties.AsNoTracking()
-            .Where(x => x.Id == request.PropertyId && (x.Account.OwnerUserId == _current.UserId || x.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)))
-            .Select(x => new { x.Id, x.AccountId })
-            .FirstOrDefaultAsync(ct);
+        var property = await PropertyAuthorization.GetAccessiblePropertyAsync(_db, _current, request.PropertyId, ct);
 
         if (property is null)
             return AppResult<PropertyFeatureSettingsDto>.Fail("forbidden", "Hospedaje inválido o sin acceso.");
@@ -93,8 +87,11 @@ public sealed class PropertyFeatureSettingsHandler :
             if (!validation.Enabled)
                 continue;
 
+            if (!await IsModuleEnabledByPlanAsync(property.AccountId, validation.RequiredModule, ct))
+                return AppResult<PropertyFeatureSettingsDto>.Fail("module_disabled", $"No podés habilitar {validation.Label} porque el plan actual no incluye el módulo {validation.ModuleLabel}.");
+
             if (!await _access.HasModuleAccessAsync(property.AccountId, validation.RequiredModule, ct))
-                return AppResult<PropertyFeatureSettingsDto>.Fail("module_disabled", $"No podés habilitar {validation.Label} porque el plan o rol actual no tiene acceso al módulo {validation.ModuleLabel}.");
+                return AppResult<PropertyFeatureSettingsDto>.Fail("forbidden", $"No tenés permisos para habilitar {validation.Label} porque tu acceso actual no incluye el módulo {validation.ModuleLabel}.");
         }
 
         var settings = await _featureService.GetSettingsAsync(request.PropertyId, ct);
@@ -156,5 +153,31 @@ public sealed class PropertyFeatureSettingsHandler :
         yield return (request.EnablePromotions, SaasModule.Promotions, "promociones", "Promociones");
         yield return (request.EnablePayments, SaasModule.Payments, "pagos", "Pagos");
         yield return (request.EnableReports, SaasModule.Reports, "reportes", "Reportes");
+    }
+
+    private async Task<bool> IsModuleEnabledByPlanAsync(int accountId, SaasModule module, CancellationToken ct)
+    {
+        var plan = await _db.Accounts.AsNoTracking()
+            .Where(x => x.Id == accountId && x.IsActive)
+            .Select(x => x.SubscriptionPlans
+                .Where(p => p.IsActive)
+                .OrderByDescending(p => p.StartedAtUtc)
+                .Select(p => new
+                {
+                    p.PlanDefinition.IncludesReports,
+                    p.PlanDefinition.IncludesOperations
+                })
+                .FirstOrDefault())
+            .FirstOrDefaultAsync(ct);
+
+        if (plan is null)
+            return false;
+
+        return module switch
+        {
+            SaasModule.Reports => plan.IncludesReports,
+            SaasModule.Housekeeping => plan.IncludesOperations,
+            _ => true
+        };
     }
 }
