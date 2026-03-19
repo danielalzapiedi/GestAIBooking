@@ -6,6 +6,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GestAI.Application.Properties;
 
+public sealed record PropertyFeatureModuleAvailabilityDto(
+    string FeatureKey,
+    SaasModule RequiredModule,
+    string FeatureLabel,
+    string ModuleLabel,
+    bool AvailableByPlan);
+
 public sealed record PropertyFeatureSettingsDto(
     bool EnableHousekeeping,
     bool EnableAgenda,
@@ -19,7 +26,8 @@ public sealed record PropertyFeatureSettingsDto(
     bool EnableReports,
     bool EnableTemplates,
     bool EnableAuditView,
-    bool UseSimpleGuestMode);
+    bool UseSimpleGuestMode,
+    List<PropertyFeatureModuleAvailabilityDto>? ModuleAvailability = null);
 
 public sealed record GetPropertyFeatureSettingsQuery(int PropertyId) : IRequest<AppResult<PropertyFeatureSettingsDto>>;
 
@@ -69,15 +77,12 @@ public sealed class PropertyFeatureSettingsHandler :
             return AppResult<PropertyFeatureSettingsDto>.Fail("forbidden", "Hospedaje inválido o sin acceso.");
 
         var settings = await _featureService.GetSettingsAsync(request.PropertyId, ct);
-        return AppResult<PropertyFeatureSettingsDto>.Ok(Map(settings));
+        return AppResult<PropertyFeatureSettingsDto>.Ok(await MapAsync(settings, property.AccountId, ct));
     }
 
     public async Task<AppResult<PropertyFeatureSettingsDto>> Handle(UpdatePropertyFeatureSettingsCommand request, CancellationToken ct)
     {
-        var property = await _db.Properties.AsNoTracking()
-            .Where(x => x.Id == request.PropertyId && (x.Account.OwnerUserId == _current.UserId || x.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)))
-            .Select(x => new { x.Id, x.AccountId })
-            .FirstOrDefaultAsync(ct);
+        var property = await PropertyAuthorization.GetAccessiblePropertyAsync(_db, _current, request.PropertyId, ct);
 
         if (property is null)
             return AppResult<PropertyFeatureSettingsDto>.Fail("forbidden", "Hospedaje inválido o sin acceso.");
@@ -98,7 +103,7 @@ public sealed class PropertyFeatureSettingsHandler :
         }
 
         var settings = await _featureService.GetSettingsAsync(request.PropertyId, ct);
-        var before = Map(settings);
+        var before = await MapAsync(settings, property.AccountId, ct);
 
         settings.EnableHousekeeping = request.EnableHousekeeping;
         settings.EnableAgenda = request.EnableAgenda;
@@ -116,14 +121,29 @@ public sealed class PropertyFeatureSettingsHandler :
 
         await _db.SaveChangesAsync(ct);
 
-        foreach (var change in DescribeChanges(before, Map(settings)))
+        var after = await MapAsync(settings, property.AccountId, ct);
+        foreach (var change in DescribeChanges(before, after))
             await _audit.WriteAsync(property.AccountId, request.PropertyId, nameof(Domain.Entities.PropertyFeatureSettings), settings.Id, "FeatureChanged", change, ct);
 
-        return AppResult<PropertyFeatureSettingsDto>.Ok(Map(settings));
+        return AppResult<PropertyFeatureSettingsDto>.Ok(after);
     }
 
-    private static PropertyFeatureSettingsDto Map(Domain.Entities.PropertyFeatureSettings s)
-        => new(s.EnableHousekeeping, s.EnableAgenda, s.EnableQuotes, s.EnableSavedQuotes, s.EnablePromotions, s.EnableAdvancedRates, s.EnablePayments, s.EnableDirectBooking, s.EnableExternalCalendarSync, s.EnableReports, s.EnableTemplates, s.EnableAuditView, s.UseSimpleGuestMode);
+    private async Task<PropertyFeatureSettingsDto> MapAsync(Domain.Entities.PropertyFeatureSettings settings, int accountId, CancellationToken ct)
+        => new(
+            settings.EnableHousekeeping,
+            settings.EnableAgenda,
+            settings.EnableQuotes,
+            settings.EnableSavedQuotes,
+            settings.EnablePromotions,
+            settings.EnableAdvancedRates,
+            settings.EnablePayments,
+            settings.EnableDirectBooking,
+            settings.EnableExternalCalendarSync,
+            settings.EnableReports,
+            settings.EnableTemplates,
+            settings.EnableAuditView,
+            settings.UseSimpleGuestMode,
+            await GetModuleAvailabilityAsync(accountId, ct));
 
     private static IEnumerable<string> DescribeChanges(PropertyFeatureSettingsDto before, PropertyFeatureSettingsDto after)
     {

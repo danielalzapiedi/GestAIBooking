@@ -23,6 +23,7 @@ public sealed class DeletePaymentCommandHandler : IRequestHandler<DeletePaymentC
 {
     private readonly IAppDbContext _db;
     private readonly ICurrentUser _current;
+    private readonly IUserAccessService _access;
     private readonly IPropertyFeatureService _features;
     private readonly IUserAccessService _access;
 
@@ -30,6 +31,7 @@ public sealed class DeletePaymentCommandHandler : IRequestHandler<DeletePaymentC
     {
         _db = db;
         _current = current;
+        _access = access;
         _features = features;
         _access = access;
     }

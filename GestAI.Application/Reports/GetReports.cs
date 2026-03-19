@@ -12,6 +12,7 @@ public sealed class GetReportsQueryHandler : IRequestHandler<GetReportsQuery, Ap
 {
     private readonly IAppDbContext _db;
     private readonly ICurrentUser _current;
+    private readonly IUserAccessService _access;
     private readonly IPropertyFeatureService _features;
     private readonly IUserAccessService _access;
 
@@ -19,6 +20,7 @@ public sealed class GetReportsQueryHandler : IRequestHandler<GetReportsQuery, Ap
     {
         _db = db;
         _current = current;
+        _access = access;
         _features = features;
         _access = access;
     }
@@ -34,8 +36,8 @@ public sealed class GetReportsQueryHandler : IRequestHandler<GetReportsQuery, Ap
         var propertyAccess = _db.Properties.AsNoTracking()
             .Where(p => p.Id == request.PropertyId && (p.Account.OwnerUserId == _current.UserId || p.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)));
 
-        if (!await propertyAccess.AnyAsync(ct))
-            return AppResult<ReportsDto>.Fail("not_found", "Hospedaje no encontrado.");
+        if (!await _access.HasModuleAccessAsync(property.AccountId, SaasModule.Reports, ct))
+            return AppResult<ReportsDto>.Fail("forbidden", "No tenés permisos para usar el módulo de reportes.");
 
         var units = await _db.Units.AsNoTracking()
             .Where(u => u.PropertyId == request.PropertyId && u.IsActive)

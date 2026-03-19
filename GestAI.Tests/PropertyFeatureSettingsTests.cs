@@ -1,8 +1,11 @@
 using GestAI.Application.Abstractions;
+using GestAI.Application.Operations;
 using GestAI.Application.Payments;
 using GestAI.Application.Properties;
 using GestAI.Application.Quotes;
+using GestAI.Application.Reports;
 using GestAI.Domain.Entities;
+using GestAI.Domain.Enums;
 using GestAI.Infrastructure.Persistence;
 using GestAI.Infrastructure.Saas;
 using Microsoft.EntityFrameworkCore;

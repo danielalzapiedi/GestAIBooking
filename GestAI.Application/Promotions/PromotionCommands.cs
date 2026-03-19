@@ -28,6 +28,7 @@ public sealed class PromotionCommandsHandler :
 {
     private readonly IAppDbContext _db;
     private readonly ICurrentUser _current;
+    private readonly IUserAccessService _access;
     private readonly IPropertyFeatureService _features;
     private readonly IUserAccessService _access;
 
@@ -35,6 +36,7 @@ public sealed class PromotionCommandsHandler :
     {
         _db = db;
         _current = current;
+        _access = access;
         _features = features;
         _access = access;
     }
@@ -50,6 +52,8 @@ public sealed class PromotionCommandsHandler :
         var property = await _db.Properties.AsNoTracking().FirstOrDefaultAsync(x => x.Id == request.PropertyId && (x.Account.OwnerUserId == _current.UserId || x.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)), ct);
         if (property is null)
             return AppResult<int>.Fail("forbidden", "Hospedaje inválido.");
+        if (!await _access.HasModuleAccessAsync(property.AccountId, SaasModule.Promotions, ct))
+            return AppResult<int>.Fail("forbidden", "No tenés permisos para usar el módulo de promociones.");
         if (!property.IsActive && request.IsActive)
             return AppResult<int>.Fail("property_inactive", "No podés activar promociones en un hospedaje inactivo.");
 

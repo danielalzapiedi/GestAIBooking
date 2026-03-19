@@ -9,7 +9,7 @@
 <div class="pagetitle d-flex justify-content-between align-items-center">
     <div>
         <h1>Configuración funcional</h1>
-        <p class="text-muted mb-0">Activá o desactivá módulos del sistema para este hospedaje.</p>
+        <p class="text-muted mb-0">Activá o desactivá features del hospedaje sin romper dependencias con el plan contratado.</p>
     </div>
     <button class="btn btn-primary" @onclick="Save">Guardar cambios</button>
 </div>
@@ -160,7 +160,7 @@ else
         {
             _settings = res.Data;
             await FeatureState.RefreshAsync(PropertyId);
-            _message = "Configuración funcional actualizada. Los cambios ya fueron aplicados en la navegación y módulos del hospedaje.";
+            _message = "Configuración funcional actualizada. La UI y las validaciones del hospedaje ya reflejan el nuevo estado.";
         }
         else
         {
