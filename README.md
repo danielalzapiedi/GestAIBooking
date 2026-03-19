@@ -47,6 +47,23 @@
 - La detección de eventos se basa en `UID` + hash de contenido.
 - El parser implementa soporte sólido para `VEVENT`, `UID`, `DTSTART`, `DTEND`, `SUMMARY` y `STATUS` para escenarios habituales de Booking/Airbnb.
 
+
+## Startup y seguridad operacional de la API
+- La API ya **no expone CORS abierto por defecto**. Los orígenes permitidos se configuran en `GestAI.Api/appsettings*.json` bajo `Cors:AllowedOrigins`.
+- El bootstrap de base ahora se controla con `DatabaseBootstrap`:
+  - `ApplyMigrations`: aplica migraciones pendientes al iniciar.
+  - `RunDemoSeed`: ejecuta el seed demo solo si está habilitado explícitamente.
+  - `DemoSeed:AdminEmail` y `DemoSeed:AdminPassword`: credenciales demo opcionales y configurables.
+- En `Development` se dejan orígenes locales comunes y migraciones automáticas habilitadas para no romper el flujo local.
+- El seed demo queda **desactivado por defecto** incluso en `Development`; para usarlo configurá credenciales vía `appsettings.Development.json`, secretos de usuario o variables de entorno.
+
+### Variables de entorno útiles
+- `DatabaseBootstrap__ApplyMigrations=true`
+- `DatabaseBootstrap__RunDemoSeed=true`
+- `DatabaseBootstrap__DemoSeed__AdminEmail=admin@local.test`
+- `DatabaseBootstrap__DemoSeed__AdminPassword=<tu-password-local>`
+- `Cors__AllowedOrigins__0=http://localhost:5000`
+
 ## Requisitos
 - .NET 9 SDK
 - SQL Server
