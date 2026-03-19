@@ -1,5 +1,6 @@
 @page "/properties/{PropertyId:int}/features"
 @using GestAI.Web.Dtos
+@using GestAI.Web.Helpers
 @inject ApiClient Api
 @inject GestAI.Web.Service.PropertyFeatureState FeatureState
 
@@ -49,11 +50,14 @@ else
 @code {
     [Parameter] public int PropertyId { get; set; }
     private PropertyFeatureSettingsDto? _settings;
+    private CurrentUserAccessDto? _access;
     private string? _message;
 
     protected override async Task OnParametersSetAsync()
     {
         _settings = await FeatureState.EnsureAsync(PropertyId);
+        var access = await Api.GetAsync<AppResult<CurrentUserAccessDto>>("api/saas/me/access");
+        _access = access?.Success == true ? access.Data : null;
     }
 
     private IReadOnlyList<(string Title, List<(string Label, string Description, string? Helper, bool Disabled, Func<bool> Getter, Action<bool> Setter)> Items)> Groups
@@ -63,7 +67,7 @@ else
             [
                 ("Operación", new List<(string, string, string?, bool, Func<bool>, Action<bool>)>
                 {
-                    ("Mostrar módulo de limpieza", "Incluye tablero y tareas de housekeeping.", null, false, () => _settings.EnableHousekeeping, v => _settings.EnableHousekeeping = v),
+                    ("Mostrar módulo de limpieza", "Incluye tablero y tareas de housekeeping.", GetModuleHelper(nameof(PropertyFeatureSettingsDto.EnableHousekeeping)), IsModuleGovernedFeatureDisabled(nameof(PropertyFeatureSettingsDto.EnableHousekeeping)), () => _settings.EnableHousekeeping, v => _settings.EnableHousekeeping = v),
                     ("Mostrar agenda operativa", "Vista diaria de check-ins y check-outs.", null, false, () => _settings.EnableAgenda, v => _settings.EnableAgenda = v),
                     ("Usar modo simple de huéspedes", "Simplifica formularios y prioriza datos mínimos.", null, false, () => _settings.UseSimpleGuestMode, v => _settings.UseSimpleGuestMode = v)
                 }),
@@ -71,13 +75,13 @@ else
                 {
                     ("Mostrar cotizador", "Cotización comercial por estadía.", null, false, () => _settings.EnableQuotes, OnQuotesChanged),
                     ("Permitir cotizaciones guardadas", "Guardar propuestas y convertir a reserva.", _settings.EnableQuotes ? null : "Requiere mantener activo el cotizador.", !_settings.EnableQuotes, () => _settings.EnableSavedQuotes, v => _settings.EnableSavedQuotes = v),
-                    ("Aplicar promociones", "Descuentos y reglas comerciales.", null, false, () => _settings.EnablePromotions, v => _settings.EnablePromotions = v),
-                    ("Usar tarifas avanzadas", "Temporadas y rangos específicos por fecha.", null, false, () => _settings.EnableAdvancedRates, v => _settings.EnableAdvancedRates = v),
+                    ("Aplicar promociones", "Descuentos y reglas comerciales.", GetModuleHelper(nameof(PropertyFeatureSettingsDto.EnablePromotions)), IsModuleGovernedFeatureDisabled(nameof(PropertyFeatureSettingsDto.EnablePromotions)), () => _settings.EnablePromotions, v => _settings.EnablePromotions = v),
+                    ("Usar tarifas avanzadas", "Temporadas y rangos específicos por fecha.", GetModuleHelper(nameof(PropertyFeatureSettingsDto.EnableAdvancedRates)), IsModuleGovernedFeatureDisabled(nameof(PropertyFeatureSettingsDto.EnableAdvancedRates)), () => _settings.EnableAdvancedRates, v => _settings.EnableAdvancedRates = v),
                     ("Habilitar venta directa", "Flujos públicos de reserva directa.", null, false, () => _settings.EnableDirectBooking, v => _settings.EnableDirectBooking = v)
                 }),
                 ("Finanzas", new List<(string, string, string?, bool, Func<bool>, Action<bool>)>
                 {
-                    ("Permitir registrar pagos", "Módulo de cobros y saldo.", null, false, () => _settings.EnablePayments, v => _settings.EnablePayments = v)
+                    ("Permitir registrar pagos", "Módulo de cobros y saldo.", GetModuleHelper(nameof(PropertyFeatureSettingsDto.EnablePayments)), IsModuleGovernedFeatureDisabled(nameof(PropertyFeatureSettingsDto.EnablePayments)), () => _settings.EnablePayments, v => _settings.EnablePayments = v)
                 }),
                 ("Distribución", new List<(string, string, string?, bool, Func<bool>, Action<bool>)>
                 {
@@ -85,7 +89,7 @@ else
                 }),
                 ("Gestión", new List<(string, string, string?, bool, Func<bool>, Action<bool>)>
                 {
-                    ("Mostrar reportes", "Métricas de ocupación e ingresos.", null, false, () => _settings.EnableReports, v => _settings.EnableReports = v),
+                    ("Mostrar reportes", "Métricas de ocupación e ingresos.", GetModuleHelper(nameof(PropertyFeatureSettingsDto.EnableReports)), IsModuleGovernedFeatureDisabled(nameof(PropertyFeatureSettingsDto.EnableReports)), () => _settings.EnableReports, v => _settings.EnableReports = v),
                     ("Usar plantillas", "Mensajes predefinidos para operación.", null, false, () => _settings.EnableTemplates, v => _settings.EnableTemplates = v),
                     ("Mostrar vista de auditoría", "Consulta visual de eventos auditados.", null, false, () => _settings.EnableAuditView, v => _settings.EnableAuditView = v)
                 })
@@ -100,6 +104,35 @@ else
         if (!value)
             _settings.EnableSavedQuotes = false;
     }
+
+    private bool IsModuleGovernedFeatureDisabled(string featureKey)
+    {
+        var requiredModule = PropertyFeatureModulePolicy.GetRequiredModule(featureKey);
+        return requiredModule.HasValue && !HasModule(requiredModule.Value);
+    }
+
+    private string? GetModuleHelper(string featureKey)
+    {
+        var requiredModule = PropertyFeatureModulePolicy.GetRequiredModule(featureKey);
+        if (!requiredModule.HasValue || HasModule(requiredModule.Value))
+            return null;
+
+        return $"Requiere acceso habilitado al módulo {GetModuleLabel(requiredModule.Value)} para esta cuenta.";
+    }
+
+    private bool HasModule(SaasModule module)
+        => _access?.Modules?.Any(x => x.Module == module && x.Allowed) ?? false;
+
+    private static string GetModuleLabel(SaasModule module)
+        => module switch
+        {
+            SaasModule.Rates => "Tarifas",
+            SaasModule.Promotions => "Promociones",
+            SaasModule.Payments => "Pagos",
+            SaasModule.Housekeeping => "Housekeeping",
+            SaasModule.Reports => "Reportes",
+            _ => module.ToString()
+        };
 
     private async Task Save()
     {

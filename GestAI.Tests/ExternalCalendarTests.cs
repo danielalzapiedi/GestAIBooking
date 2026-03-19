@@ -20,7 +20,7 @@ public class ExternalCalendarTests
         await using var db = CreateDbContext(nameof(Quote_Should_Not_Return_Unit_When_External_Event_Overlaps));
         SeedAvailabilityScenario(db);
 
-        var features = new PropertyFeatureService(db);
+        var features = new PropertyFeatureService(db, new FakeUserAccessService());
         var handler = new GetQuoteQueryHandler(db, new FakeCurrentUser(), features);
         var result = await handler.Handle(new GetQuoteQuery(1, 1, new DateOnly(2026, 3, 10), new DateOnly(2026, 3, 12), 2, 0), CancellationToken.None);
 
@@ -36,7 +36,7 @@ public class ExternalCalendarTests
         db.Guests.Add(new Guest { Id = 10, PropertyId = 1, Property = db.Properties.First(), FullName = "Guest" , IsActive = true});
         await db.SaveChangesAsync();
 
-        var features = new PropertyFeatureService(db);
+        var features = new PropertyFeatureService(db, new FakeUserAccessService());
         var handler = new UpsertBookingCommandHandler(db, new FakeCurrentUser(), features);
         var result = await handler.Handle(new UpsertBookingCommand(1, null, 1, 10, new DateOnly(2026, 3, 10), new DateOnly(2026, 3, 12), 2, 0, 100m, null), CancellationToken.None);
 
@@ -99,6 +99,15 @@ END:VCALENDAR")));
         public string UserId => "user-1";
         public string? Email => "owner@test.com";
         public string? FullName => "Owner Test";
+    }
+
+    private sealed class FakeUserAccessService : IUserAccessService
+    {
+        public Task<int?> GetCurrentAccountIdAsync(CancellationToken ct) => Task.FromResult<int?>(1);
+        public Task<int?> GetDefaultPropertyIdAsync(CancellationToken ct) => Task.FromResult<int?>(1);
+        public Task<bool> HasPropertyAccessAsync(int propertyId, CancellationToken ct) => Task.FromResult(true);
+        public Task<AccountUser?> GetMembershipAsync(int accountId, CancellationToken ct) => Task.FromResult<AccountUser?>(null);
+        public Task<bool> HasModuleAccessAsync(int accountId, SaasModule module, CancellationToken ct) => Task.FromResult(true);
     }
 
     private sealed class StubHandler(string responseContent) : HttpMessageHandler
