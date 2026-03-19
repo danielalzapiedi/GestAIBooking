@@ -1,8 +1,137 @@
 @page "/setup"
+@inject ApiClient Api
 @inject NavigationManager Nav
+@using GestAI.Web.Dtos
 
-<div class="container py-4">
-    <h3>Setup</h3>
-    <p class="text-muted">Este repo viene con seed automático (usuario + hospedaje demo). Si llegaste acá, revisá el README.</p>
-    <button class="btn btn-primary" @onclick="@(()=>Nav.NavigateTo("/"))">Ir al inicio</button>
+<PageTitle>Configuración inicial</PageTitle>
+
+<div class="pagetitle">
+    <h1>Configuración inicial</h1>
+    <p class="text-muted mb-0">Te ayudamos a destrabar el próximo paso para poder operar el sistema sin depender de datos demo ni configuraciones implícitas.</p>
 </div>
+
+@if (!_loaded)
+{
+    <EmptyState Title="Analizando tu cuenta" Description="Estamos revisando si ya existe una cuenta, hospedajes y unidades disponibles." Icon="bi-hourglass-split" />
+}
+else if (_status is null)
+{
+    <EmptyState Title="No pudimos obtener el estado inicial" Description="Reintentá en unos segundos para continuar con la configuración." Icon="bi-exclamation-triangle">
+        <button class="btn btn-outline-primary" @onclick="LoadAsync">Reintentar</button>
+    </EmptyState>
+}
+else
+{
+    <div class="row g-3">
+        <div class="col-12 col-xl-8">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Estado actual</h5>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <div class="summary-pill h-100">
+                                <div class="label">Cuenta activa</div>
+                                <div class="value">@YesNo(_status.HasAnyAccount)</div>
+                                <div class="small text-muted mt-1">Necesaria para operar el SaaS.</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="summary-pill h-100">
+                                <div class="label">Hospedajes</div>
+                                <div class="value">@YesNo(_status.HasAnyProperty)</div>
+                                <div class="small text-muted mt-1">Base para reservas, tarifas y operación.</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="summary-pill h-100">
+                                <div class="label">Unidades</div>
+                                <div class="value">@YesNo(_status.HasAnyUnit)</div>
+                                <div class="small text-muted mt-1">Necesarias para vender disponibilidad real.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info mt-4 mb-0">
+                        El bootstrap demo y cualquier auto-seed dependen de configuración explícita en la API. Esta pantalla refleja el estado real de tus datos actuales.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-xl-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Siguiente paso recomendado</h5>
+                    <p class="text-muted">@PrimaryMessage</p>
+
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-primary" @onclick="PrimaryAction">
+                            <i class="bi bi-arrow-right-circle me-1"></i>@PrimaryActionLabel
+                        </button>
+                        <button class="btn btn-outline-secondary" @onclick="LoadAsync">
+                            <i class="bi bi-arrow-repeat me-1"></i>Actualizar estado
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _loaded;
+    private SetupStatusDto? _status;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loaded = false;
+        var response = await Api.GetAsync<AppResult<SetupStatusDto>>("api/setup/status");
+        _status = response?.Success == true ? response.Data : null;
+        _loaded = true;
+    }
+
+    private string PrimaryActionLabel => _status switch
+    {
+        null => "Reintentar",
+        { HasAnyProperty: false } => "Crear hospedaje",
+        { HasAnyUnit: false } => "Ir a hospedajes",
+        { DefaultPropertyId: not null } => "Ir al dashboard",
+        _ => "Elegir hospedaje"
+    };
+
+    private string PrimaryMessage => _status switch
+    {
+        null => "No hay suficiente información para sugerir el siguiente paso.",
+        { HasAnyProperty: false } => "Todavía no hay hospedajes cargados. Empezá por crear el primer hospedaje de la cuenta.",
+        { HasAnyUnit: false } => "Ya existe al menos un hospedaje, pero todavía faltan unidades activas para poder operar reservas.",
+        { DefaultPropertyId: not null } => "Tu cuenta ya tiene un hospedaje por defecto configurado. Podés volver directo a la operación.",
+        _ => "Ya hay datos cargados, pero falta elegir o confirmar un hospedaje de trabajo para seguir operando con claridad."
+    };
+
+    private void PrimaryAction()
+    {
+        if (_status is null)
+        {
+            _ = LoadAsync();
+            return;
+        }
+
+        if (!_status.HasAnyProperty)
+        {
+            Nav.NavigateTo("/properties/new");
+            return;
+        }
+
+        if (_status.DefaultPropertyId is not null)
+        {
+            Nav.NavigateTo($"/dashboard/{_status.DefaultPropertyId.Value}");
+            return;
+        }
+
+        Nav.NavigateTo("/properties");
+    }
+
+    private static string YesNo(bool value) => value ? "Sí" : "No";
+}

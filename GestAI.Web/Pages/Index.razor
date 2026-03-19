@@ -21,6 +21,10 @@
             {
                 Navigation.NavigateTo($"/dashboard/{res.Data.DefaultPropertyId}");
             }
+            else if (res?.Success == true && res.Data?.HasAnyProperty == true)
+            {
+                Navigation.NavigateTo("/properties");
+            }
             else
             {
                 Navigation.NavigateTo("/setup");

@@ -14,7 +14,6 @@ public sealed class CompleteOperationalTaskCommandHandler : IRequestHandler<Comp
     private readonly ICurrentUser _current;
     private readonly IUserAccessService _access;
     private readonly IPropertyFeatureService _features;
-    private readonly IUserAccessService _access;
 
     public CompleteOperationalTaskCommandHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features, IUserAccessService access)
     {
@@ -22,7 +21,6 @@ public sealed class CompleteOperationalTaskCommandHandler : IRequestHandler<Comp
         _current = current;
         _access = access;
         _features = features;
-        _access = access;
     }
 
     public async Task<AppResult> Handle(CompleteOperationalTaskCommand request, CancellationToken ct)
