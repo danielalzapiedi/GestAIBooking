@@ -151,7 +151,7 @@
                         {
                             <li><NavLink class="sidebar-sub-link" href="@AgendaHref" Match="NavLinkMatch.Prefix"><i class="bi bi-clock-history"></i><span>Agenda</span></NavLink></li>
                         }
-                        @if (IsFeatureEnabled(x => x.EnableHousekeeping))
+                        @if (IsFeatureEnabled(x => x.EnableHousekeeping) && HasModule(SaasModule.Housekeeping))
                         {
                             <li><NavLink class="sidebar-sub-link" href="@HousekeepingHref" Match="NavLinkMatch.Prefix"><i class="bi bi-brush"></i><span>Limpieza</span></NavLink></li>
                         }
@@ -178,11 +178,11 @@
                         {
                             <li><NavLink class="sidebar-sub-link" href="@SavedQuotesHref" Match="NavLinkMatch.All"><i class="bi bi-save2"></i><span>Cotizaciones guardadas</span></NavLink></li>
                         }
-                        @if (IsFeatureEnabled(x => x.EnableAdvancedRates))
+                        @if (IsFeatureEnabled(x => x.EnableAdvancedRates) && HasModule(SaasModule.Rates))
                         {
                             <li><NavLink class="sidebar-sub-link" href="@RatesHref" Match="NavLinkMatch.Prefix"><i class="bi bi-tags"></i><span>Tarifas</span></NavLink></li>
                         }
-                        @if (IsFeatureEnabled(x => x.EnablePromotions))
+                        @if (IsFeatureEnabled(x => x.EnablePromotions) && HasModule(SaasModule.Promotions))
                         {
                             <li><NavLink class="sidebar-sub-link" href="@PromotionsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-percent"></i><span>Promociones</span></NavLink></li>
                         }
@@ -534,8 +534,8 @@
     private bool ShowCommercialGroup =>
         IsFeatureEnabled(x => x.EnableQuotes)
         || IsFeatureEnabled(x => x.EnableSavedQuotes)
-        || IsFeatureEnabled(x => x.EnableAdvancedRates)
-        || IsFeatureEnabled(x => x.EnablePromotions)
+        || (IsFeatureEnabled(x => x.EnableAdvancedRates) && HasModule(SaasModule.Rates))
+        || (IsFeatureEnabled(x => x.EnablePromotions) && HasModule(SaasModule.Promotions))
         || IsFeatureEnabled(x => x.EnableTemplates);
 
     private bool ShowManagementGroup =>

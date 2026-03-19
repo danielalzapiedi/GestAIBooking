@@ -41,12 +41,15 @@ public sealed class UpsertRatePlanCommandValidator : AbstractValidator<UpsertRat
 
 public sealed class UpsertRatePlanCommandHandler : IRequestHandler<UpsertRatePlanCommand, AppResult<int>>
 {
-    private readonly IAppDbContext _db; private readonly ICurrentUser _current; private readonly IPropertyFeatureService _features;
-    public UpsertRatePlanCommandHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features) { _db = db; _current = current; _features = features; }
+    private readonly IAppDbContext _db; private readonly ICurrentUser _current; private readonly IPropertyFeatureService _features; private readonly IUserAccessService _access;
+    public UpsertRatePlanCommandHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features, IUserAccessService access) { _db = db; _current = current; _features = features; _access = access; }
     public async Task<AppResult<int>> Handle(UpsertRatePlanCommand request, CancellationToken ct)
     {
         if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.AdvancedRates, ct))
             return AppResult<int>.Fail("feature_disabled", "Las tarifas avanzadas están desactivadas para este hospedaje.");
+
+        if (!await _access.HasPropertyModuleAccessAsync(request.PropertyId, SaasModule.Rates, ct))
+            return AppResult<int>.Fail("forbidden", "No tenés acceso al módulo de tarifas.");
 
         var unit = await _db.Units.AsNoTracking()
             .Include(x => x.Property)
