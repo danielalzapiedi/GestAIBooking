@@ -25,7 +25,6 @@ public sealed class DeletePaymentCommandHandler : IRequestHandler<DeletePaymentC
     private readonly ICurrentUser _current;
     private readonly IUserAccessService _access;
     private readonly IPropertyFeatureService _features;
-    private readonly IUserAccessService _access;
 
     public DeletePaymentCommandHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features, IUserAccessService access)
     {
@@ -33,7 +32,6 @@ public sealed class DeletePaymentCommandHandler : IRequestHandler<DeletePaymentC
         _current = current;
         _access = access;
         _features = features;
-        _access = access;
     }
 
     public async Task<AppResult> Handle(DeletePaymentCommand request, CancellationToken ct)

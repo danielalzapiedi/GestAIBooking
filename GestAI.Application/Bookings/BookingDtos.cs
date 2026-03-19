@@ -121,9 +121,9 @@ public sealed record CheckInOutCommand(
     bool IsCheckIn,
     TimeOnly? ActualTime,
     string? Notes,
-    int? FinalGuestsCount,
-    bool DocumentationVerified,
-    bool DepositVerified) : MediatR.IRequest<Common.AppResult>;
+    int? FinalGuestsCount = null,
+    bool DocumentationVerified = false,
+    bool DepositVerified = false) : MediatR.IRequest<Common.AppResult>;
 
 public sealed record DuplicateBookingCommand(
     int PropertyId,

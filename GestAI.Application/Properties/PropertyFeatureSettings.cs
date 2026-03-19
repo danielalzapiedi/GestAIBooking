@@ -145,6 +145,31 @@ public sealed class PropertyFeatureSettingsHandler :
             settings.UseSimpleGuestMode,
             await GetModuleAvailabilityAsync(accountId, ct));
 
+    private async Task<List<PropertyFeatureModuleAvailabilityDto>> GetModuleAvailabilityAsync(int accountId, CancellationToken ct)
+    {
+        var items = new (string FeatureKey, SaasModule RequiredModule, string FeatureLabel, string ModuleLabel)[]
+        {
+            (nameof(PropertyFeatureSettingsDto.EnableHousekeeping), SaasModule.Housekeeping, "Housekeeping", "Housekeeping"),
+            (nameof(PropertyFeatureSettingsDto.EnableAdvancedRates), SaasModule.Rates, "Tarifas avanzadas", "Tarifas"),
+            (nameof(PropertyFeatureSettingsDto.EnablePromotions), SaasModule.Promotions, "Promociones", "Promociones"),
+            (nameof(PropertyFeatureSettingsDto.EnablePayments), SaasModule.Payments, "Pagos", "Pagos"),
+            (nameof(PropertyFeatureSettingsDto.EnableReports), SaasModule.Reports, "Reportes", "Reportes")
+        };
+
+        var result = new List<PropertyFeatureModuleAvailabilityDto>(items.Length);
+        foreach (var item in items)
+        {
+            result.Add(new PropertyFeatureModuleAvailabilityDto(
+                item.FeatureKey,
+                item.RequiredModule,
+                item.FeatureLabel,
+                item.ModuleLabel,
+                await _access.HasModuleAccessAsync(accountId, item.RequiredModule, ct)));
+        }
+
+        return result;
+    }
+
     private static IEnumerable<string> DescribeChanges(PropertyFeatureSettingsDto before, PropertyFeatureSettingsDto after)
     {
         var pairs = new Dictionary<string, (bool Before, bool After)>

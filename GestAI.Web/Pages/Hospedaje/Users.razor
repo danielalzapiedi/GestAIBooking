@@ -78,7 +78,11 @@
                 <div class="col-md-6"><label class="form-label">Hospedaje por defecto</label><select class="form-select" @bind="_form.DefaultPropertyId"><option value="">Sin definir</option>@foreach(var p in _properties){<option value="@p.Id">@p.Name</option>}</select></div>
                 @if (_form.UserId is null)
                 {
-                    <div class="col-md-6"><label class="form-label">Password temporal</label><input class="form-control" @bind="_form.Password" /></div>
+                    <div class="col-md-6">
+                        <label class="form-label">Password temporal</label>
+                        <input class="form-control" @bind="_form.Password" />
+                        <div class="form-text">Se genera una clave temporal editable para evitar usar una contraseña fija repetida.</div>
+                    </div>
                 }
             </div>
             <div class="mt-3 d-flex gap-2">
@@ -94,7 +98,7 @@
     private bool _showForm;
     private List<AccountUserListItemDto> _items = new();
     private List<PropertyListItemDto> _properties = new();
-    private UpsertAccountUserCommand _form = new(null, "", "", "", true, InternalUserRole.Reception, null, "Temp123$");
+    private UpsertAccountUserCommand _form = new(null, "", "", "", true, InternalUserRole.Reception, null, GenerateTemporaryPassword());
 
     protected override async Task OnInitializedAsync()
     {
@@ -112,7 +116,7 @@
 
     private void NewUser()
     {
-        _form = new UpsertAccountUserCommand(null, "", "", "", true, InternalUserRole.Reception, null, "Temp123$");
+        _form = new UpsertAccountUserCommand(null, "", "", "", true, InternalUserRole.Reception, null, GenerateTemporaryPassword());
         _showForm = true;
     }
 
@@ -142,4 +146,7 @@
     }
 
     private void Cancel() => _showForm = false;
+
+    private static string GenerateTemporaryPassword()
+        => $"Tmp{Guid.NewGuid():N}"[..12] + "!";
 }

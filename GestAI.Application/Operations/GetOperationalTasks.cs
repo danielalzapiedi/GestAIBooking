@@ -14,7 +14,6 @@ public sealed class GetOperationalTasksQueryHandler : IRequestHandler<GetOperati
     private readonly ICurrentUser _current;
     private readonly IUserAccessService _access;
     private readonly IPropertyFeatureService _features;
-    private readonly IUserAccessService _access;
 
     public GetOperationalTasksQueryHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features, IUserAccessService access)
     {
@@ -22,7 +21,6 @@ public sealed class GetOperationalTasksQueryHandler : IRequestHandler<GetOperati
         _current = current;
         _access = access;
         _features = features;
-        _access = access;
     }
 
     public async Task<AppResult<List<OperationalTaskDto>>> Handle(GetOperationalTasksQuery request, CancellationToken ct)

@@ -35,7 +35,6 @@ public sealed class CreatePaymentCommandHandler : IRequestHandler<CreatePaymentC
     private readonly ICurrentUser _current;
     private readonly IUserAccessService _access;
     private readonly IPropertyFeatureService _features;
-    private readonly IUserAccessService _access;
 
     public CreatePaymentCommandHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features, IUserAccessService access)
     {
@@ -43,7 +42,6 @@ public sealed class CreatePaymentCommandHandler : IRequestHandler<CreatePaymentC
         _current = current;
         _access = access;
         _features = features;
-        _access = access;
     }
 
     public async Task<AppResult<int>> Handle(CreatePaymentCommand request, CancellationToken ct)

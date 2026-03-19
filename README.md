@@ -42,7 +42,7 @@
 - No es un channel manager enterprise.
 - No modifica precios ni disponibilidad por APIs oficiales de OTA.
 - No sincroniza mensajes, huéspedes ni contenido comercial del anuncio.
-- La sincronización implementada en esta etapa es **manual**.
+- La sincronización manual ya está disponible y el auto-sync existe como opción técnica, pero queda **deshabilitado por defecto** hasta activarlo por configuración.
 - Los eventos importados impactan disponibilidad como bloqueos externos, no como reservas internas editables.
 - La detección de eventos se basa en `UID` + hash de contenido.
 - El parser implementa soporte sólido para `VEVENT`, `UID`, `DTSTART`, `DTEND`, `SUMMARY` y `STATUS` para escenarios habituales de Booking/Airbnb.
@@ -54,6 +54,7 @@
   - `ApplyMigrations`: aplica migraciones pendientes al iniciar.
   - `RunDemoSeed`: ejecuta el seed demo solo si está habilitado explícitamente.
   - `DemoSeed:AdminEmail` y `DemoSeed:AdminPassword`: credenciales demo opcionales y configurables.
+- El worker de `ExternalCalendarAutoSync` queda registrado pero **desactivado por defecto**; para usarlo hay que habilitar `ExternalCalendarAutoSync:Enabled=true`.
 - En `Development` se dejan orígenes locales comunes y migraciones automáticas habilitadas para no romper el flujo local.
 - El seed demo queda **desactivado por defecto** incluso en `Development`; para usarlo configurá credenciales vía `appsettings.Development.json`, secretos de usuario o variables de entorno.
 
@@ -62,6 +63,7 @@
 - `DatabaseBootstrap__RunDemoSeed=true`
 - `DatabaseBootstrap__DemoSeed__AdminEmail=admin@local.test`
 - `DatabaseBootstrap__DemoSeed__AdminPassword=<tu-password-local>`
+- `ExternalCalendarAutoSync__Enabled=true`
 - `Cors__AllowedOrigins__0=http://localhost:5000`
 
 ## Requisitos
