@@ -1,5 +1,6 @@
 using AutoMapper;
 using FluentValidation;
+using GestAI.Api.Configuration;
 using GestAI.Api.Middleware;
 using GestAI.Application;
 using GestAI.Application.Abstractions;
@@ -13,16 +14,32 @@ using GestAI.Infrastructure.Payments;
 using GestAI.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddCors(opt =>
+var corsOptions = builder.Configuration
+    .GetSection(ApiCorsOptions.SectionName)
+    .Get<ApiCorsOptions>() ?? new ApiCorsOptions();
+var allowedOrigins = corsOptions.AllowedOrigins
+    .Where(static origin => !string.IsNullOrWhiteSpace(origin))
+    .Select(static origin => origin.Trim().TrimEnd('/'))
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray();
+
+builder.Services.Configure<ApiCorsOptions>(builder.Configuration.GetSection(ApiCorsOptions.SectionName));
+builder.Services.Configure<DatabaseBootstrapOptions>(builder.Configuration.GetSection(DatabaseBootstrapOptions.SectionName));
+
+if (allowedOrigins.Length > 0)
 {
-    opt.AddPolicy("all", p => p
-        .AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin());
-});
+    builder.Services.AddCors(opt =>
+    {
+        opt.AddPolicy(ApiCorsOptions.SectionName, policy => policy
+            .WithOrigins(allowedOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod());
+    });
+}
 
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddPersistence(builder.Configuration);
@@ -64,11 +81,21 @@ builder.Services.AddScoped<IAuditService, GestAI.Infrastructure.Saas.AuditServic
 builder.Services.AddScoped<IPropertyFeatureService, GestAI.Infrastructure.Saas.PropertyFeatureService>();
 
 var app = builder.Build();
+var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
 
 app.UseSwagger();
 app.UseSwaggerUI();
 
-app.UseCors("all");
+if (allowedOrigins.Length > 0)
+{
+    app.UseCors(ApiCorsOptions.SectionName);
+    logger.LogInformation("CORS enabled for {OriginCount} configured origin(s).", allowedOrigins.Length);
+}
+else
+{
+    logger.LogInformation("CORS middleware disabled because no allowed origins were configured.");
+}
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -76,26 +103,6 @@ app.UseApiExceptionHandling();
 
 app.MapControllers();
 
-// migrate + seed
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    var userMgr = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
-    var roleMgr = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-    var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DbInitializer");
-
-    await DbInitializer.MigrateAndSeedAsync(
-        db,
-        userMgr,
-        roleMgr,
-        logger,
-        new DbInitializer.SeedOptions(
-            AdminEmail: "admin@local.test",
-            AdminPassword: "Admin123$",
-            PropertyName: "Alma de Lago (Demo)",
-            UnitNames: new[] { "Cabaña 1", "Cabaña 2", "Cabaña 3" }
-        )
-    );
-}
+await app.InitializeDatabaseAsync();
 
 app.Run();

@@ -10,9 +10,21 @@ public static class DbInitializer
 {
     public sealed record SeedOptions(string AdminEmail, string AdminPassword, string PropertyName, string[] UnitNames);
 
-    public static async Task MigrateAndSeedAsync(AppDbContext db, UserManager<User> userManager, RoleManager<IdentityRole> roleManager, ILogger logger, SeedOptions options, CancellationToken ct = default)
+    public static async Task ApplyMigrationsAsync(AppDbContext db, ILogger logger, CancellationToken ct = default)
     {
-        await db.Database.EnsureCreatedAsync(ct);
+        var pendingMigrations = await db.Database.GetPendingMigrationsAsync(ct);
+        if (!pendingMigrations.Any())
+        {
+            logger.LogInformation("Database is up to date. No migrations were applied.");
+            return;
+        }
+
+        await db.Database.MigrateAsync(ct);
+        logger.LogInformation("Applied {Count} pending database migration(s).", pendingMigrations.Count());
+    }
+
+    public static async Task SeedDemoDataAsync(AppDbContext db, UserManager<User> userManager, RoleManager<IdentityRole> roleManager, ILogger logger, SeedOptions options, CancellationToken ct = default)
+    {
         if (!await roleManager.RoleExistsAsync("Admin")) await roleManager.CreateAsync(new IdentityRole("Admin"));
         var admin = await userManager.FindByEmailAsync(options.AdminEmail);
         if (admin is null)
@@ -157,6 +169,6 @@ public static class DbInitializer
         {
             adminTracked.DefaultPropertyId = prop.Id; adminTracked.DefaultAccountId = account.Id; await db.SaveChangesAsync(ct);
         }
-        logger.LogInformation("DB migrate + seed OK. Admin: {Email}, PropertyId: {PropertyId}", options.AdminEmail, prop.Id);
+        logger.LogInformation("Demo seed OK. Admin: {Email}, PropertyId: {PropertyId}", options.AdminEmail, prop.Id);
     }
 }
