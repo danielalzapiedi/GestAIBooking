@@ -18,7 +18,7 @@ public class PropertyFeatureSettingsTests
         await using var db = CreateDbContext(nameof(PropertyFeatureService_Returns_Defaults_When_Setting_Does_Not_Exist));
         SeedProperty(db);
 
-        var service = new PropertyFeatureService(db);
+        var service = new PropertyFeatureService(db, new FakeUserAccessService());
         var settings = await service.GetSettingsAsync(1, CancellationToken.None);
 
         Assert.True(settings.EnablePayments);
@@ -32,8 +32,11 @@ public class PropertyFeatureSettingsTests
         await using var db = CreateDbContext(nameof(UpdateFeatureSettingsCommand_Updates_Flags_And_Audits));
         SeedProperty(db);
 
-        var service = new PropertyFeatureService(db);
-        var handler = new PropertyFeatureSettingsHandler(db, new FakeCurrentUser(), service, new FakeAuditService());
+        SeedPlan(db, includesReports: true, includesOperations: true);
+
+        var access = new FakeUserAccessService();
+        var service = new PropertyFeatureService(db, access);
+        var handler = new PropertyFeatureSettingsHandler(db, new FakeCurrentUser(), access, service, new FakeAuditService());
 
         var result = await handler.Handle(new UpdatePropertyFeatureSettingsCommand(1, false, true, true, false, false, true, false, true, false, true, true, true, true), CancellationToken.None);
 
@@ -51,7 +54,7 @@ public class PropertyFeatureSettingsTests
         db.Bookings.Add(new Booking { Id = 1, PropertyId = 1, UnitId = 1, GuestId = 1, BookingCode = "B-1", CheckInDate = new DateOnly(2026, 1, 1), CheckOutDate = new DateOnly(2026, 1, 2) });
         await db.SaveChangesAsync();
 
-        var handler = new GetPaymentsQueryHandler(db, new FakeCurrentUser(), new PropertyFeatureService(db));
+        var handler = new GetPaymentsQueryHandler(db, new FakeCurrentUser(), new PropertyFeatureService(db, new FakeUserAccessService()));
         var result = await handler.Handle(new GetPaymentsQuery(1, 1), CancellationToken.None);
 
         Assert.False(result.Success);
@@ -64,8 +67,11 @@ public class PropertyFeatureSettingsTests
         await using var db = CreateDbContext(nameof(UpdateFeatureSettings_Should_Reject_SavedQuotes_Without_Quotes));
         SeedProperty(db);
 
-        var service = new PropertyFeatureService(db);
-        var handler = new PropertyFeatureSettingsHandler(db, new FakeCurrentUser(), service, new FakeAuditService());
+        SeedPlan(db, includesReports: true, includesOperations: true);
+
+        var access = new FakeUserAccessService();
+        var service = new PropertyFeatureService(db, access);
+        var handler = new PropertyFeatureSettingsHandler(db, new FakeCurrentUser(), access, service, new FakeAuditService());
 
         var result = await handler.Handle(new UpdatePropertyFeatureSettingsCommand(1, true, true, false, true, true, true, true, true, true, true, true, true, false), CancellationToken.None);
 
@@ -81,11 +87,41 @@ public class PropertyFeatureSettingsTests
         db.PropertyFeatureSettings.Add(new PropertyFeatureSettings { PropertyId = 1, EnableQuotes = true, EnableSavedQuotes = false });
         await db.SaveChangesAsync();
 
-        var handler = new GetQuoteQueryHandler(db, new FakeCurrentUser(), new PropertyFeatureService(db));
+        var handler = new GetQuoteQueryHandler(db, new FakeCurrentUser(), new PropertyFeatureService(db, new FakeUserAccessService()));
         var result = await handler.Handle(new SaveQuoteCommand(1, 1, new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 3), 2, 0, "Guest", "g@test.com", "123"), CancellationToken.None);
 
         Assert.False(result.Success);
         Assert.Equal("feature_disabled", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Reports_Are_Disabled_When_Account_Plan_Does_Not_Include_Module()
+    {
+        await using var db = CreateDbContext(nameof(Reports_Are_Disabled_When_Account_Plan_Does_Not_Include_Module));
+        SeedProperty(db);
+        SeedPlan(db, includesReports: false, includesOperations: true);
+
+        var service = new PropertyFeatureService(db, new FakeUserAccessService(reportsEnabled: false));
+        var enabled = await service.IsEnabledAsync(1, GestAI.Domain.Enums.PropertyFeature.Reports, CancellationToken.None);
+
+        Assert.False(enabled);
+    }
+
+    [Fact]
+    public async Task UpdateFeatureSettings_Should_Reject_Report_When_Module_Is_Not_Available()
+    {
+        await using var db = CreateDbContext(nameof(UpdateFeatureSettings_Should_Reject_Report_When_Module_Is_Not_Available));
+        SeedProperty(db);
+        SeedPlan(db, includesReports: false, includesOperations: true);
+
+        var access = new FakeUserAccessService(reportsEnabled: false);
+        var service = new PropertyFeatureService(db, access);
+        var handler = new PropertyFeatureSettingsHandler(db, new FakeCurrentUser(), access, service, new FakeAuditService());
+
+        var result = await handler.Handle(new UpdatePropertyFeatureSettingsCommand(1, true, true, true, false, true, true, true, true, true, true, true, true, false), CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal("module_disabled", result.ErrorCode);
     }
 
     private static AppDbContext CreateDbContext(string dbName)
@@ -113,6 +149,32 @@ public class PropertyFeatureSettingsTests
         db.SaveChanges();
     }
 
+    private static void SeedPlan(AppDbContext db, bool includesReports, bool includesOperations)
+    {
+        db.SaasPlanDefinitions.Add(new SaasPlanDefinition
+        {
+            Id = 100,
+            Code = GestAI.Domain.Enums.SaasPlanCode.Pro,
+            Name = "Pro",
+            MaxProperties = 3,
+            MaxUnits = 20,
+            MaxUsers = 5,
+            IncludesReports = includesReports,
+            IncludesOperations = includesOperations,
+            IncludesPublicPortal = true
+        });
+
+        db.AccountSubscriptionPlans.Add(new AccountSubscriptionPlan
+        {
+            AccountId = 1,
+            PlanDefinitionId = 100,
+            IsActive = true,
+            StartedAtUtc = DateTime.UtcNow
+        });
+
+        db.SaveChanges();
+    }
+
     private sealed class FakeCurrentUser : ICurrentUser
     {
         public string UserId => "user-1";
@@ -124,5 +186,20 @@ public class PropertyFeatureSettingsTests
     {
         public Task WriteAsync(int accountId, int? propertyId, string entityName, int? entityId, string action, string summary, CancellationToken ct)
             => Task.CompletedTask;
+    }
+
+    private sealed class FakeUserAccessService(bool reportsEnabled = true) : IUserAccessService
+    {
+        public Task<int?> GetCurrentAccountIdAsync(CancellationToken ct) => Task.FromResult<int?>(1);
+        public Task<int?> GetDefaultPropertyIdAsync(CancellationToken ct) => Task.FromResult<int?>(1);
+        public Task<bool> HasPropertyAccessAsync(int propertyId, CancellationToken ct) => Task.FromResult(true);
+        public Task<AccountUser?> GetMembershipAsync(int accountId, CancellationToken ct) => Task.FromResult<AccountUser?>(null);
+
+        public Task<bool> HasModuleAccessAsync(int accountId, GestAI.Domain.Enums.SaasModule module, CancellationToken ct)
+            => Task.FromResult(module switch
+            {
+                GestAI.Domain.Enums.SaasModule.Reports => reportsEnabled,
+                _ => true
+            });
     }
 }
