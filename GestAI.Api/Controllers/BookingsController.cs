@@ -23,6 +23,10 @@ public sealed class BookingsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> Detail(int propertyId, int bookingId, CancellationToken ct)
         => Ok(await mediator.Send(new GetBookingDetailQuery(propertyId, bookingId), ct));
 
+    [HttpGet("pricing-preview")]
+    public async Task<IActionResult> PricingPreview(int propertyId, [FromQuery] int unitId, [FromQuery] DateOnly checkInDate, [FromQuery] DateOnly checkOutDate, [FromQuery] int adults = 2, [FromQuery] int children = 0, CancellationToken ct = default)
+        => Ok(await mediator.Send(new GetBookingPricingPreviewQuery(propertyId, unitId, checkInDate, checkOutDate, adults, children), ct));
+
     [HttpPost]
     public async Task<IActionResult> Upsert(int propertyId, [FromBody] UpsertBookingCommand command, CancellationToken ct)
         => Ok(await mediator.Send(command with { PropertyId = propertyId }, ct));
