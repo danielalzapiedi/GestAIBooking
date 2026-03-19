@@ -28,7 +28,7 @@ else
                     <div class="row g-2">
                         <div class="col-12 col-md-6">
                             <label class="form-label">Unidad</label>
-                            <select class="form-select" @bind="_unitId">
+                            <select class="form-select" @bind="_unitId" @bind:after="OnBookingInputsChangedAsync">
                                 <option value="0">-- Seleccionar --</option>
                                 @foreach (var u in _units)
                                 {
@@ -48,11 +48,11 @@ else
 
                         <div class="col-12 col-md-3">
                             <label class="form-label">Adultos</label>
-                            <input class="form-control" type="number" min="1" @bind="_adults" />
+                            <input class="form-control" type="number" min="1" @bind="_adults" @bind:after="OnBookingInputsChangedAsync" />
                         </div>
                         <div class="col-12 col-md-3">
                             <label class="form-label">Niños</label>
-                            <input class="form-control" type="number" min="0" @bind="_children" />
+                            <input class="form-control" type="number" min="0" @bind="_children" @bind:after="OnBookingInputsChangedAsync" />
                         </div>
                         <div class="col-12 col-md-3">
                             <label class="form-label">Origen</label>
@@ -74,12 +74,34 @@ else
                         </div>
 
                         <div class="col-12 col-md-6">
-                            <label class="form-label">Total</label>
-                            <input class="form-control" type="number" step="0.01" min="0" @bind="_totalAmount" />
+                            <label class="form-label d-flex align-items-center gap-2">
+                                <span>Total</span>
+                                @if (_pricingLoading && !_manualPriceOverride)
+                                {
+                                    <span class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></span>
+                                }
+                            </label>
+                            <input class="form-control @( !_manualPriceOverride ? "bg-light" : string.Empty)" type="number" step="0.01" min="0" @bind="_totalAmount" readonly="@(!_manualPriceOverride)" disabled="@(!_manualPriceOverride)" />
+                            @if (_manualPriceOverride)
+                            {
+                                <div class="form-text">Precio manual activo. El valor ingresado se enviará al guardar.</div>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(_pricingError))
+                            {
+                                <div class="form-text text-warning">@_pricingError</div>
+                            }
+                            else
+                            {
+                                <div class="form-text">El total se calcula automáticamente. Activá Precio manual para editarlo.</div>
+                            }
                         </div>
                         <div class="col-12 col-md-6 form-check mt-4 ps-5">
-                            <input class="form-check-input" type="checkbox" @bind="_manualPriceOverride" id="manualOverride" />
+                            <input class="form-check-input" type="checkbox" @bind="_manualPriceOverride" @bind:after="OnManualPriceOverrideChangedAsync" id="manualOverride" />
                             <label class="form-check-label" for="manualOverride">Precio manual (override)</label>
+                            @if (!_manualPriceOverride && _pricingPreview?.ValidationMessages?.Count > 0)
+                            {
+                                <div class="small text-warning mt-2">@_pricingPreview.ValidationMessages[0]</div>
+                            }
                         </div>
 
                         <div class="col-12">
@@ -212,6 +234,11 @@ else
     private BookingSource _source = BookingSource.Direct;
     private BookingStatus _status = BookingStatus.Tentative;
     private bool _manualPriceOverride;
+    private bool _pricingLoading;
+    private string? _pricingError;
+    private BookingPricingPreviewDto? _pricingPreview;
+    private string? _lastPricingRequestKey;
+    private long _pricingRequestVersion;
     private bool _confirmManualPriceChange;
     private bool _confirmReduceStayWithPayments;
 
@@ -274,6 +301,7 @@ else
             }
         }
 
+        await RefreshPricingPreviewAsync(force: true);
         _loaded = true;
     }
 
@@ -349,6 +377,89 @@ else
         _guestId = res.Data; _guestSelectedName = _quickGuestFullName; _guestQuery = _quickGuestFullName; _guestModalOpen = false;
     }
 
-    private void OnCheckInChanged(ChangeEventArgs e) { if (DateOnly.TryParse(e.Value?.ToString(), out var d)) _checkIn = d; }
-    private void OnCheckOutChanged(ChangeEventArgs e) { if (DateOnly.TryParse(e.Value?.ToString(), out var d)) _checkOut = d; }
+    private async Task OnCheckInChanged(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), out var d))
+            _checkIn = d;
+
+        await OnBookingInputsChangedAsync();
+    }
+
+    private async Task OnCheckOutChanged(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), out var d))
+            _checkOut = d;
+
+        await OnBookingInputsChangedAsync();
+    }
+
+    private async Task OnBookingInputsChangedAsync()
+        => await RefreshPricingPreviewAsync();
+
+    private async Task OnManualPriceOverrideChangedAsync()
+    {
+        _pricingError = null;
+        _lastPricingRequestKey = null;
+
+        if (_manualPriceOverride)
+            return;
+
+        await RefreshPricingPreviewAsync(force: true);
+    }
+
+    private async Task RefreshPricingPreviewAsync(bool force = false)
+    {
+        if (_manualPriceOverride)
+        {
+            _pricingLoading = false;
+            _pricingError = null;
+            return;
+        }
+
+        if (_unitId <= 0)
+        {
+            _pricingPreview = null;
+            _pricingError = "Seleccioná una unidad para calcular el total.";
+            _pricingLoading = false;
+            _lastPricingRequestKey = null;
+            return;
+        }
+
+        if (_checkOut <= _checkIn)
+        {
+            _pricingPreview = null;
+            _pricingError = "Ingresá una estadía válida para recalcular el total.";
+            _pricingLoading = false;
+            _lastPricingRequestKey = null;
+            return;
+        }
+
+        var requestKey = $"{_unitId}:{_checkIn:yyyyMMdd}:{_checkOut:yyyyMMdd}:{_adults}:{_children}";
+        if (!force && string.Equals(_lastPricingRequestKey, requestKey, StringComparison.Ordinal))
+            return;
+
+        _pricingLoading = true;
+        _pricingError = null;
+        var requestVersion = Interlocked.Increment(ref _pricingRequestVersion);
+
+        var res = await Api.GetAsync<AppResult<BookingPricingPreviewDto>>(
+            $"api/properties/{PropertyId}/bookings/pricing-preview?unitId={_unitId}&checkInDate={_checkIn:yyyy-MM-dd}&checkOutDate={_checkOut:yyyy-MM-dd}&adults={_adults}&children={_children}");
+
+        if (requestVersion != _pricingRequestVersion)
+            return;
+
+        _pricingLoading = false;
+
+        if (res?.Success == true && res.Data is not null)
+        {
+            _pricingPreview = res.Data;
+            _totalAmount = res.Data.TotalAmount;
+            _lastPricingRequestKey = requestKey;
+            return;
+        }
+
+        _pricingPreview = null;
+        _pricingError = res?.Message ?? "No se pudo calcular el total automáticamente.";
+        _lastPricingRequestKey = null;
+    }
 }

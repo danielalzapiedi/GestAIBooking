@@ -57,6 +57,57 @@ public class CommercialAndBookingTests
         Assert.Equal(59.40m, result.SuggestedDepositAmount);
     }
 
+
+    [Fact]
+    public async Task BookingPricingPreview_ReturnsCalculatedTotal_WhenManualOverrideIsNotUsed()
+    {
+        await using var db = CreateDbContext(nameof(BookingPricingPreview_ReturnsCalculatedTotal_WhenManualOverrideIsNotUsed));
+        SeedPricingScenario(db);
+
+        var handler = new GetBookingPricingPreviewQueryHandler(db, new FakeCurrentUser());
+        var result = await handler.Handle(new GetBookingPricingPreviewQuery(1, 1, new DateOnly(2026, 3, 13), new DateOnly(2026, 3, 15), 2, 0), CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(198m, result.Data!.TotalAmount);
+        Assert.Equal(99m, result.Data.SuggestedNightlyRate);
+    }
+
+    [Fact]
+    public async Task UpsertBooking_UsesCalculatedTotal_WhenManualPriceOverrideIsFalse()
+    {
+        await using var db = CreateDbContext(nameof(UpsertBooking_UsesCalculatedTotal_WhenManualPriceOverrideIsFalse));
+        SeedPricingScenario(db);
+        db.Guests.Add(new Guest { Id = 10, PropertyId = 1, Property = db.Properties.First(), FullName = "Guest", IsActive = true });
+        await db.SaveChangesAsync();
+
+        var features = new FakePropertyFeatureService();
+        var handler = new UpsertBookingCommandHandler(db, new FakeCurrentUser(), features);
+        var result = await handler.Handle(new UpsertBookingCommand(1, null, 1, 10, new DateOnly(2026, 3, 13), new DateOnly(2026, 3, 15), 2, 0, 999m, null), CancellationToken.None);
+
+        Assert.True(result.Success);
+        var booking = await db.Bookings.FirstAsync(x => x.Id == result.Data);
+        Assert.Equal(198m, booking.TotalAmount);
+        Assert.False(booking.ManualPriceOverride);
+    }
+
+    [Fact]
+    public async Task UpsertBooking_PreservesManualTotal_WhenManualPriceOverrideIsTrue()
+    {
+        await using var db = CreateDbContext(nameof(UpsertBooking_PreservesManualTotal_WhenManualPriceOverrideIsTrue));
+        SeedPricingScenario(db);
+        db.Guests.Add(new Guest { Id = 11, PropertyId = 1, Property = db.Properties.First(), FullName = "Guest", IsActive = true });
+        await db.SaveChangesAsync();
+
+        var features = new FakePropertyFeatureService();
+        var handler = new UpsertBookingCommandHandler(db, new FakeCurrentUser(), features);
+        var result = await handler.Handle(new UpsertBookingCommand(1, null, 1, 11, new DateOnly(2026, 3, 13), new DateOnly(2026, 3, 15), 2, 0, 250m, null, ManualPriceOverride: true, ConfirmManualPriceChange: true), CancellationToken.None);
+
+        Assert.True(result.Success);
+        var booking = await db.Bookings.FirstAsync(x => x.Id == result.Data);
+        Assert.Equal(250m, booking.TotalAmount);
+        Assert.True(booking.ManualPriceOverride);
+    }
+
     [Fact]
     public async Task ChangeBookingStatus_UpdatesBookingAndUnitOperationalState()
     {
@@ -160,6 +211,16 @@ public class CommercialAndBookingTests
         db.Guests.Add(guest);
         db.Bookings.Add(booking);
         db.SaveChanges();
+    }
+
+
+    private sealed class FakePropertyFeatureService : IPropertyFeatureService
+    {
+        public Task<PropertyFeatureSettings> GetSettingsAsync(int propertyId, CancellationToken ct)
+            => Task.FromResult(new PropertyFeatureSettings { PropertyId = propertyId, EnablePromotions = true, EnableAdvancedRates = true });
+
+        public Task<bool> IsEnabledAsync(int propertyId, PropertyFeature feature, CancellationToken ct)
+            => Task.FromResult(true);
     }
 
     private sealed class FakeCurrentUser : ICurrentUser

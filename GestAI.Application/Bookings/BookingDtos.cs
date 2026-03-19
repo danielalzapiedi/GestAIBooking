@@ -90,6 +90,31 @@ public sealed record CalendarBookingDto(
     decimal TotalAmount,
     decimal PendingAmount);
 
+
+public sealed record BookingPricingPreviewDto(
+    int PropertyId,
+    int UnitId,
+    string UnitName,
+    DateOnly CheckInDate,
+    DateOnly CheckOutDate,
+    int Adults,
+    int Children,
+    decimal BaseAmount,
+    decimal PromotionsAmount,
+    decimal TotalAmount,
+    decimal SuggestedNightlyRate,
+    decimal SuggestedDepositAmount,
+    List<string> ValidationMessages,
+    List<PricingLineDto> PricingLines);
+
+public sealed record GetBookingPricingPreviewQuery(
+    int PropertyId,
+    int UnitId,
+    DateOnly CheckInDate,
+    DateOnly CheckOutDate,
+    int Adults,
+    int Children) : MediatR.IRequest<Common.AppResult<BookingPricingPreviewDto>>;
+
 public sealed record CheckInOutCommand(
     int PropertyId,
     int BookingId,
