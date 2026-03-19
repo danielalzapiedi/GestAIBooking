@@ -29,18 +29,23 @@ public sealed class PromotionCommandsHandler :
     private readonly IAppDbContext _db;
     private readonly ICurrentUser _current;
     private readonly IPropertyFeatureService _features;
+    private readonly IUserAccessService _access;
 
-    public PromotionCommandsHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features)
+    public PromotionCommandsHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features, IUserAccessService access)
     {
         _db = db;
         _current = current;
         _features = features;
+        _access = access;
     }
 
     public async Task<AppResult<int>> Handle(UpsertPromotionCommand request, CancellationToken ct)
     {
         if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Promotions, ct))
             return AppResult<int>.Fail("feature_disabled", "Las promociones están desactivadas para este hospedaje.");
+
+        if (!await _access.HasPropertyModuleAccessAsync(request.PropertyId, SaasModule.Promotions, ct))
+            return AppResult<int>.Fail("forbidden", "No tenés acceso al módulo de promociones.");
 
         var property = await _db.Properties.AsNoTracking().FirstOrDefaultAsync(x => x.Id == request.PropertyId && (x.Account.OwnerUserId == _current.UserId || x.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)), ct);
         if (property is null)
@@ -97,6 +102,9 @@ public sealed class PromotionCommandsHandler :
         if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Promotions, ct))
             return AppResult.Fail("feature_disabled", "Las promociones están desactivadas para este hospedaje.");
 
+        if (!await _access.HasPropertyModuleAccessAsync(request.PropertyId, SaasModule.Promotions, ct))
+            return AppResult.Fail("forbidden", "No tenés acceso al módulo de promociones.");
+
         var entity = await _db.Promotions.FirstOrDefaultAsync(x => x.Id == request.PromotionId && x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)), ct);
         if (entity is null)
             return AppResult.Fail("not_found", "Promoción no encontrada.");
@@ -109,6 +117,9 @@ public sealed class PromotionCommandsHandler :
     {
         if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Promotions, ct))
             return AppResult.Fail("feature_disabled", "Las promociones están desactivadas para este hospedaje.");
+
+        if (!await _access.HasPropertyModuleAccessAsync(request.PropertyId, SaasModule.Promotions, ct))
+            return AppResult.Fail("forbidden", "No tenés acceso al módulo de promociones.");
 
         var entity = await _db.Promotions.FirstOrDefaultAsync(x => x.Id == request.PromotionId && x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)), ct);
         if (entity is null)
@@ -123,6 +134,9 @@ public sealed class PromotionCommandsHandler :
     {
         if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Promotions, ct))
             return AppResult<List<PromotionDto>>.Fail("feature_disabled", "Las promociones están desactivadas para este hospedaje.");
+
+        if (!await _access.HasPropertyModuleAccessAsync(request.PropertyId, SaasModule.Promotions, ct))
+            return AppResult<List<PromotionDto>>.Fail("forbidden", "No tenés acceso al módulo de promociones.");
 
         var data = await _db.Promotions.AsNoTracking()
             .Where(x => x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)) && (request.IncludeDeleted || !x.IsDeleted))

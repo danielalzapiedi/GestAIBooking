@@ -13,18 +13,23 @@ public sealed class GetReportsQueryHandler : IRequestHandler<GetReportsQuery, Ap
     private readonly IAppDbContext _db;
     private readonly ICurrentUser _current;
     private readonly IPropertyFeatureService _features;
+    private readonly IUserAccessService _access;
 
-    public GetReportsQueryHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features)
+    public GetReportsQueryHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features, IUserAccessService access)
     {
         _db = db;
         _current = current;
         _features = features;
+        _access = access;
     }
 
     public async Task<AppResult<ReportsDto>> Handle(GetReportsQuery request, CancellationToken ct)
     {
         if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Reports, ct))
             return AppResult<ReportsDto>.Fail("feature_disabled", "Los reportes están desactivados para este hospedaje.");
+
+        if (!await _access.HasPropertyModuleAccessAsync(request.PropertyId, SaasModule.Reports, ct))
+            return AppResult<ReportsDto>.Fail("forbidden", "No tenés acceso al módulo de reportes.");
 
         var propertyAccess = _db.Properties.AsNoTracking()
             .Where(p => p.Id == request.PropertyId && (p.Account.OwnerUserId == _current.UserId || p.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)));
