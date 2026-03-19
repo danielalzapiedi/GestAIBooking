@@ -1,5 +1,4 @@
 using GestAI.Application.Abstractions;
-using GestAI.Application.Properties;
 using GestAI.Domain.Entities;
 using GestAI.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -9,12 +8,10 @@ namespace GestAI.Infrastructure.Saas;
 public sealed class PropertyFeatureService : IPropertyFeatureService
 {
     private readonly IAppDbContext _db;
-    private readonly IUserAccessService _access;
 
-    public PropertyFeatureService(IAppDbContext db, IUserAccessService access)
+    public PropertyFeatureService(IAppDbContext db)
     {
         _db = db;
-        _access = access;
     }
 
     public async Task<PropertyFeatureSettings> GetSettingsAsync(int propertyId, CancellationToken ct)
@@ -32,7 +29,7 @@ public sealed class PropertyFeatureService : IPropertyFeatureService
     public async Task<bool> IsEnabledAsync(int propertyId, PropertyFeature feature, CancellationToken ct)
     {
         var settings = await GetSettingsAsync(propertyId, ct);
-        var enabled = feature switch
+        return feature switch
         {
             PropertyFeature.Housekeeping => settings.EnableHousekeeping,
             PropertyFeature.Agenda => settings.EnableAgenda,
@@ -49,22 +46,5 @@ public sealed class PropertyFeatureService : IPropertyFeatureService
             PropertyFeature.SimpleGuestMode => settings.UseSimpleGuestMode,
             _ => true
         };
-
-        if (!enabled)
-            return false;
-
-        var requiredModule = PropertyFeatureModulePolicy.GetRequiredModule(feature);
-        if (!requiredModule.HasValue)
-            return true;
-
-        var accountId = await _db.Properties.AsNoTracking()
-            .Where(x => x.Id == propertyId)
-            .Select(x => (int?)x.AccountId)
-            .FirstOrDefaultAsync(ct);
-
-        if (!accountId.HasValue)
-            return false;
-
-        return await _access.HasModuleAccessAsync(accountId.Value, requiredModule.Value, ct);
     }
 }
