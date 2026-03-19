@@ -33,12 +33,14 @@ public sealed class CreatePaymentCommandHandler : IRequestHandler<CreatePaymentC
 {
     private readonly IAppDbContext _db;
     private readonly ICurrentUser _current;
+    private readonly IUserAccessService _access;
     private readonly IPropertyFeatureService _features;
 
-    public CreatePaymentCommandHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features)
+    public CreatePaymentCommandHandler(IAppDbContext db, ICurrentUser current, IUserAccessService access, IPropertyFeatureService features)
     {
         _db = db;
         _current = current;
+        _access = access;
         _features = features;
     }
 
@@ -46,6 +48,13 @@ public sealed class CreatePaymentCommandHandler : IRequestHandler<CreatePaymentC
     {
         if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Payments, ct))
             return AppResult<int>.Fail("feature_disabled", "La gestión de pagos está desactivada para este hospedaje.");
+
+        var property = await PropertyAuthorization.GetAccessiblePropertyAsync(_db, _current, request.PropertyId, ct);
+        if (property is null)
+            return AppResult<int>.Fail("forbidden", "Hospedaje inválido o sin acceso.");
+
+        if (!await _access.HasModuleAccessAsync(property.AccountId, SaasModule.Payments, ct))
+            return AppResult<int>.Fail("forbidden", "No tenés permisos para usar el módulo de pagos.");
 
         var booking = await _db.Bookings
             .FirstOrDefaultAsync(b => b.Id == request.BookingId && b.PropertyId == request.PropertyId && (b.Property.Account.OwnerUserId == _current.UserId || b.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)), ct);
