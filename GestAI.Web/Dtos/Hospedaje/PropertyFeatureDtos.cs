@@ -1,5 +1,7 @@
 namespace GestAI.Web.Dtos;
 
+public sealed record PropertyFeatureModuleAvailabilityDto(string FeatureKey, SaasModule RequiredModule, string FeatureLabel, string ModuleLabel, bool AvailableByPlan);
+
 public sealed class PropertyFeatureSettingsDto
 {
     public bool EnableHousekeeping { get; set; } = true;
@@ -15,6 +17,7 @@ public sealed class PropertyFeatureSettingsDto
     public bool EnableTemplates { get; set; } = true;
     public bool EnableAuditView { get; set; } = true;
     public bool UseSimpleGuestMode { get; set; }
+    public List<PropertyFeatureModuleAvailabilityDto> ModuleAvailability { get; set; } = [];
 }
 
 public sealed record UpdatePropertyFeatureSettingsCommand(

@@ -131,13 +131,13 @@ public class PropertyFeatureSettingsTests
     }
 
     [Fact]
-    public async Task UpdateFeatureSettings_Should_Return_Forbidden_When_User_Lacks_Module_Access()
+    public async Task UpdateFeatureSettings_Should_Return_Forbidden_When_User_Lacks_Configuration_Access()
     {
-        await using var db = CreateDbContext(nameof(UpdateFeatureSettings_Should_Return_Forbidden_When_User_Lacks_Module_Access));
+        await using var db = CreateDbContext(nameof(UpdateFeatureSettings_Should_Return_Forbidden_When_User_Lacks_Configuration_Access));
         SeedProperty(db);
         SeedPlan(db, includesReports: true, includesOperations: true);
 
-        var access = new FakeUserAccessService(reportsEnabled: false);
+        var access = new FakeUserAccessService(configurationEnabled: false);
         var service = new PropertyFeatureService(db);
         var handler = new PropertyFeatureSettingsHandler(db, new FakeCurrentUser(), access, service, new FakeAuditService());
 
@@ -145,6 +145,24 @@ public class PropertyFeatureSettingsTests
 
         Assert.False(result.Success);
         Assert.Equal("forbidden", result.ErrorCode);
+    }
+
+
+    [Fact]
+    public async Task UpdateFeatureSettings_Should_Allow_Module_Governed_Feature_When_Plan_Includes_It_And_User_Has_Configuration_Access()
+    {
+        await using var db = CreateDbContext(nameof(UpdateFeatureSettings_Should_Allow_Module_Governed_Feature_When_Plan_Includes_It_And_User_Has_Configuration_Access));
+        SeedProperty(db);
+        SeedPlan(db, includesReports: true, includesOperations: true);
+
+        var access = new FakeUserAccessService(reportsEnabled: false, configurationEnabled: true);
+        var service = new PropertyFeatureService(db);
+        var handler = new PropertyFeatureSettingsHandler(db, new FakeCurrentUser(), access, service, new FakeAuditService());
+
+        var result = await handler.Handle(new UpdatePropertyFeatureSettingsCommand(1, true, true, true, false, false, false, false, true, false, true, true, true, false), CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.True(result.Data!.EnableReports);
     }
 
     [Fact]
@@ -253,7 +271,7 @@ public class PropertyFeatureSettingsTests
             => Task.CompletedTask;
     }
 
-    private sealed class FakeUserAccessService(bool reportsEnabled = true, bool housekeepingEnabled = true, bool paymentsEnabled = true) : IUserAccessService
+    private sealed class FakeUserAccessService(bool reportsEnabled = true, bool housekeepingEnabled = true, bool paymentsEnabled = true, bool configurationEnabled = true) : IUserAccessService
     {
         public Task<int?> GetCurrentAccountIdAsync(CancellationToken ct) => Task.FromResult<int?>(1);
         public Task<int?> GetDefaultPropertyIdAsync(CancellationToken ct) => Task.FromResult<int?>(1);
@@ -266,6 +284,7 @@ public class PropertyFeatureSettingsTests
                 GestAI.Domain.Enums.SaasModule.Reports => reportsEnabled,
                 GestAI.Domain.Enums.SaasModule.Housekeeping => housekeepingEnabled,
                 GestAI.Domain.Enums.SaasModule.Payments => paymentsEnabled,
+                GestAI.Domain.Enums.SaasModule.Configuration => configurationEnabled,
                 _ => true
             });
     }

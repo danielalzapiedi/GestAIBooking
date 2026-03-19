@@ -1,10 +1,18 @@
 using GestAI.Application.Abstractions;
 using GestAI.Application.Common;
+using GestAI.Application.Saas;
 using GestAI.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace GestAI.Application.Properties;
+
+public sealed record PropertyFeatureModuleAvailabilityDto(
+    string FeatureKey,
+    SaasModule RequiredModule,
+    string FeatureLabel,
+    string ModuleLabel,
+    bool AvailableByPlan);
 
 public sealed record PropertyFeatureSettingsDto(
     bool EnableHousekeeping,
@@ -19,7 +27,8 @@ public sealed record PropertyFeatureSettingsDto(
     bool EnableReports,
     bool EnableTemplates,
     bool EnableAuditView,
-    bool UseSimpleGuestMode);
+    bool UseSimpleGuestMode,
+    List<PropertyFeatureModuleAvailabilityDto>? ModuleAvailability = null);
 
 public sealed record GetPropertyFeatureSettingsQuery(int PropertyId) : IRequest<AppResult<PropertyFeatureSettingsDto>>;
 
@@ -66,7 +75,7 @@ public sealed class PropertyFeatureSettingsHandler :
             return AppResult<PropertyFeatureSettingsDto>.Fail("forbidden", "Hospedaje inválido o sin acceso.");
 
         var settings = await _featureService.GetSettingsAsync(request.PropertyId, ct);
-        return AppResult<PropertyFeatureSettingsDto>.Ok(Map(settings));
+        return AppResult<PropertyFeatureSettingsDto>.Ok(await MapAsync(settings, property.AccountId, ct));
     }
 
     public async Task<AppResult<PropertyFeatureSettingsDto>> Handle(UpdatePropertyFeatureSettingsCommand request, CancellationToken ct)
@@ -82,20 +91,15 @@ public sealed class PropertyFeatureSettingsHandler :
         if (!request.EnableQuotes && request.EnableSavedQuotes)
             return AppResult<PropertyFeatureSettingsDto>.Fail("invalid_state", "No podés habilitar cotizaciones guardadas si el cotizador está deshabilitado.");
 
-        foreach (var validation in GetModuleGovernedFeatureValidations(request))
+        var availability = await GetModuleAvailabilityAsync(property.AccountId, ct);
+        foreach (var validation in availability.Where(x => IsFeatureEnabled(request, x.FeatureKey)))
         {
-            if (!validation.Enabled)
-                continue;
-
-            if (!await IsModuleEnabledByPlanAsync(property.AccountId, validation.RequiredModule, ct))
-                return AppResult<PropertyFeatureSettingsDto>.Fail("module_disabled", $"No podés habilitar {validation.Label} porque el plan actual no incluye el módulo {validation.ModuleLabel}.");
-
-            if (!await _access.HasModuleAccessAsync(property.AccountId, validation.RequiredModule, ct))
-                return AppResult<PropertyFeatureSettingsDto>.Fail("forbidden", $"No tenés permisos para habilitar {validation.Label} porque tu acceso actual no incluye el módulo {validation.ModuleLabel}.");
+            if (!validation.AvailableByPlan)
+                return AppResult<PropertyFeatureSettingsDto>.Fail("module_disabled", $"No podés habilitar {validation.FeatureLabel} porque el plan actual no incluye el módulo {validation.ModuleLabel}.");
         }
 
         var settings = await _featureService.GetSettingsAsync(request.PropertyId, ct);
-        var before = Map(settings);
+        var before = await MapAsync(settings, property.AccountId, ct);
 
         settings.EnableHousekeeping = request.EnableHousekeeping;
         settings.EnableAgenda = request.EnableAgenda;
@@ -113,14 +117,29 @@ public sealed class PropertyFeatureSettingsHandler :
 
         await _db.SaveChangesAsync(ct);
 
-        foreach (var change in DescribeChanges(before, Map(settings)))
+        var after = await MapAsync(settings, property.AccountId, ct);
+        foreach (var change in DescribeChanges(before, after))
             await _audit.WriteAsync(property.AccountId, request.PropertyId, nameof(Domain.Entities.PropertyFeatureSettings), settings.Id, "FeatureChanged", change, ct);
 
-        return AppResult<PropertyFeatureSettingsDto>.Ok(Map(settings));
+        return AppResult<PropertyFeatureSettingsDto>.Ok(after);
     }
 
-    private static PropertyFeatureSettingsDto Map(Domain.Entities.PropertyFeatureSettings s)
-        => new(s.EnableHousekeeping, s.EnableAgenda, s.EnableQuotes, s.EnableSavedQuotes, s.EnablePromotions, s.EnableAdvancedRates, s.EnablePayments, s.EnableDirectBooking, s.EnableExternalCalendarSync, s.EnableReports, s.EnableTemplates, s.EnableAuditView, s.UseSimpleGuestMode);
+    private async Task<PropertyFeatureSettingsDto> MapAsync(Domain.Entities.PropertyFeatureSettings settings, int accountId, CancellationToken ct)
+        => new(
+            settings.EnableHousekeeping,
+            settings.EnableAgenda,
+            settings.EnableQuotes,
+            settings.EnableSavedQuotes,
+            settings.EnablePromotions,
+            settings.EnableAdvancedRates,
+            settings.EnablePayments,
+            settings.EnableDirectBooking,
+            settings.EnableExternalCalendarSync,
+            settings.EnableReports,
+            settings.EnableTemplates,
+            settings.EnableAuditView,
+            settings.UseSimpleGuestMode,
+            await GetModuleAvailabilityAsync(accountId, ct));
 
     private static IEnumerable<string> DescribeChanges(PropertyFeatureSettingsDto before, PropertyFeatureSettingsDto after)
     {
@@ -146,38 +165,35 @@ public sealed class PropertyFeatureSettingsHandler :
             .Select(x => $"Feature {x.Key} changed from {x.Value.Before.ToString().ToLowerInvariant()} to {x.Value.After.ToString().ToLowerInvariant()}");
     }
 
-    private static IEnumerable<(bool Enabled, SaasModule RequiredModule, string Label, string ModuleLabel)> GetModuleGovernedFeatureValidations(UpdatePropertyFeatureSettingsCommand request)
-    {
-        yield return (request.EnableHousekeeping, SaasModule.Housekeeping, "housekeeping", "Housekeeping");
-        yield return (request.EnableAdvancedRates, SaasModule.Rates, "tarifas avanzadas", "Tarifas");
-        yield return (request.EnablePromotions, SaasModule.Promotions, "promociones", "Promociones");
-        yield return (request.EnablePayments, SaasModule.Payments, "pagos", "Pagos");
-        yield return (request.EnableReports, SaasModule.Reports, "reportes", "Reportes");
-    }
-
-    private async Task<bool> IsModuleEnabledByPlanAsync(int accountId, SaasModule module, CancellationToken ct)
+    private async Task<List<PropertyFeatureModuleAvailabilityDto>> GetModuleAvailabilityAsync(int accountId, CancellationToken ct)
     {
         var plan = await _db.Accounts.AsNoTracking()
             .Where(x => x.Id == accountId && x.IsActive)
             .Select(x => x.SubscriptionPlans
                 .Where(p => p.IsActive)
                 .OrderByDescending(p => p.StartedAtUtc)
-                .Select(p => new
-                {
-                    p.PlanDefinition.IncludesReports,
-                    p.PlanDefinition.IncludesOperations
-                })
+                .Select(p => p.PlanDefinition)
                 .FirstOrDefault())
             .FirstOrDefaultAsync(ct);
 
-        if (plan is null)
-            return false;
-
-        return module switch
-        {
-            SaasModule.Reports => plan.IncludesReports,
-            SaasModule.Housekeeping => plan.IncludesOperations,
-            _ => true
-        };
+        return PropertyFeatureModulePolicy.GetGovernedFeatures()
+            .Select(definition => new PropertyFeatureModuleAvailabilityDto(
+                definition.FeatureKey,
+                definition.RequiredModule,
+                definition.FeatureLabel,
+                definition.ModuleLabel,
+                SaasPermissionMap.IsEnabledByPlan(plan, definition.RequiredModule)))
+            .ToList();
     }
+
+    private static bool IsFeatureEnabled(UpdatePropertyFeatureSettingsCommand request, string featureKey)
+        => featureKey switch
+        {
+            nameof(PropertyFeatureSettingsDto.EnableHousekeeping) => request.EnableHousekeeping,
+            nameof(PropertyFeatureSettingsDto.EnableAdvancedRates) => request.EnableAdvancedRates,
+            nameof(PropertyFeatureSettingsDto.EnablePromotions) => request.EnablePromotions,
+            nameof(PropertyFeatureSettingsDto.EnablePayments) => request.EnablePayments,
+            nameof(PropertyFeatureSettingsDto.EnableReports) => request.EnableReports,
+            _ => false
+        };
 }
