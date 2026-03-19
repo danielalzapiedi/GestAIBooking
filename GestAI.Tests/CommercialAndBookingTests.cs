@@ -5,6 +5,7 @@ using GestAI.Application.Common.Pricing;
 using GestAI.Domain.Entities;
 using GestAI.Domain.Enums;
 using GestAI.Infrastructure.Persistence;
+using GestAI.Infrastructure.Saas;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -109,6 +110,24 @@ public class CommercialAndBookingTests
     }
 
     [Fact]
+    public async Task UpsertBooking_Applies_Promotions_Based_On_Property_Feature_Settings_Only()
+    {
+        await using var db = CreateDbContext(nameof(UpsertBooking_Applies_Promotions_Based_On_Property_Feature_Settings_Only));
+        SeedPricingScenario(db);
+        db.PropertyFeatureSettings.Add(new PropertyFeatureSettings { PropertyId = 1, EnablePromotions = true });
+        db.Guests.Add(new Guest { Id = 12, PropertyId = 1, Property = db.Properties.First(), FullName = "Guest", IsActive = true });
+        await db.SaveChangesAsync();
+
+        var handler = new UpsertBookingCommandHandler(db, new FakeCurrentUser(), new PropertyFeatureService(db));
+        var result = await handler.Handle(new UpsertBookingCommand(1, null, 1, 12, new DateOnly(2026, 3, 13), new DateOnly(2026, 3, 15), 2, 0, 999m, null), CancellationToken.None);
+
+        Assert.True(result.Success);
+        var booking = await db.Bookings.FirstAsync(x => x.Id == result.Data);
+        Assert.Equal(22m, booking.PromotionsAmount);
+        Assert.Equal(198m, booking.TotalAmount);
+    }
+
+    [Fact]
     public async Task ChangeBookingStatus_UpdatesBookingAndUnitOperationalState()
     {
         await using var db = CreateDbContext(nameof(ChangeBookingStatus_UpdatesBookingAndUnitOperationalState));
@@ -123,6 +142,26 @@ public class CommercialAndBookingTests
         Assert.Equal(BookingStatus.CheckedOut, booking.Status);
         Assert.Equal(BookingOperationalStatus.CheckedOut, booking.OperationalStatus);
         Assert.Equal(UnitOperationalStatus.PendingCleaning, booking.Unit.OperationalStatus);
+    }
+
+    [Fact]
+    public async Task Checkout_Generates_Cleaning_Task_Based_On_Property_Feature_Settings_Only()
+    {
+        await using var db = CreateDbContext(nameof(Checkout_Generates_Cleaning_Task_Based_On_Property_Feature_Settings_Only));
+        SeedBookingScenario(db);
+        db.PropertyFeatureSettings.Add(new PropertyFeatureSettings { PropertyId = 1, EnableHousekeeping = true });
+        await db.SaveChangesAsync();
+
+        var handler = new UpsertBookingCommandHandler(db, new FakeCurrentUser(), new PropertyFeatureService(db));
+        var result = await handler.Handle(new CheckInOutCommand(1, 1, false, null, "Checkout"), CancellationToken.None);
+
+        Assert.True(result.Success);
+
+        var booking = await db.Bookings.Include(x => x.Unit).FirstAsync(x => x.Id == 1);
+        var task = await db.OperationalTasks.SingleAsync();
+        Assert.Equal(UnitOperationalStatus.PendingCleaning, booking.Unit.OperationalStatus);
+        Assert.Equal(OperationalTaskType.Cleaning, task.Type);
+        Assert.Equal(1, task.BookingId);
     }
 
     private static AppDbContext CreateDbContext(string dbName)
