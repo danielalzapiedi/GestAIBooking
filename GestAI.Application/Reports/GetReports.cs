@@ -14,13 +14,15 @@ public sealed class GetReportsQueryHandler : IRequestHandler<GetReportsQuery, Ap
     private readonly ICurrentUser _current;
     private readonly IUserAccessService _access;
     private readonly IPropertyFeatureService _features;
+    private readonly IUserAccessService _access;
 
-    public GetReportsQueryHandler(IAppDbContext db, ICurrentUser current, IUserAccessService access, IPropertyFeatureService features)
+    public GetReportsQueryHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features, IUserAccessService access)
     {
         _db = db;
         _current = current;
         _access = access;
         _features = features;
+        _access = access;
     }
 
     public async Task<AppResult<ReportsDto>> Handle(GetReportsQuery request, CancellationToken ct)
@@ -28,9 +30,11 @@ public sealed class GetReportsQueryHandler : IRequestHandler<GetReportsQuery, Ap
         if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Reports, ct))
             return AppResult<ReportsDto>.Fail("feature_disabled", "Los reportes están desactivados para este hospedaje.");
 
-        var property = await PropertyAuthorization.GetAccessiblePropertyAsync(_db, _current, request.PropertyId, ct);
-        if (property is null)
-            return AppResult<ReportsDto>.Fail("forbidden", "Hospedaje inválido o sin acceso.");
+        if (!await _access.HasPropertyModuleAccessAsync(request.PropertyId, SaasModule.Reports, ct))
+            return AppResult<ReportsDto>.Fail("forbidden", "No tenés acceso al módulo de reportes.");
+
+        var propertyAccess = _db.Properties.AsNoTracking()
+            .Where(p => p.Id == request.PropertyId && (p.Account.OwnerUserId == _current.UserId || p.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)));
 
         if (!await _access.HasModuleAccessAsync(property.AccountId, SaasModule.Reports, ct))
             return AppResult<ReportsDto>.Fail("forbidden", "No tenés permisos para usar el módulo de reportes.");

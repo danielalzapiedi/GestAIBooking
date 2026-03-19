@@ -1,5 +1,6 @@
 @page "/properties/{PropertyId:int}/features"
 @using GestAI.Web.Dtos
+@using GestAI.Web.Helpers
 @inject ApiClient Api
 @inject GestAI.Web.Service.PropertyFeatureState FeatureState
 
@@ -49,10 +50,15 @@ else
 @code {
     [Parameter] public int PropertyId { get; set; }
     private PropertyFeatureSettingsDto? _settings;
+    private CurrentUserAccessDto? _access;
     private string? _message;
 
     protected override async Task OnParametersSetAsync()
-        => _settings = await FeatureState.EnsureAsync(PropertyId);
+    {
+        _settings = await FeatureState.EnsureAsync(PropertyId);
+        var access = await Api.GetAsync<AppResult<CurrentUserAccessDto>>("api/saas/me/access");
+        _access = access?.Success == true ? access.Data : null;
+    }
 
     private IReadOnlyList<(string Title, List<(string Label, string Description, string? Helper, bool Disabled, Func<bool> Getter, Action<bool> Setter)> Items)> Groups
         => _settings is null
@@ -100,19 +106,33 @@ else
     }
 
     private bool IsModuleGovernedFeatureDisabled(string featureKey)
-        => GetModuleAvailability(featureKey) is { AvailableByPlan: false };
+    {
+        var requiredModule = PropertyFeatureModulePolicy.GetRequiredModule(featureKey);
+        return requiredModule.HasValue && !HasModule(requiredModule.Value);
+    }
 
     private string? GetModuleHelper(string featureKey)
     {
-        var requirement = GetModuleAvailability(featureKey);
-        if (requirement is null || requirement.AvailableByPlan)
+        var requiredModule = PropertyFeatureModulePolicy.GetRequiredModule(featureKey);
+        if (!requiredModule.HasValue || HasModule(requiredModule.Value))
             return null;
 
-        return $"Requiere que la cuenta tenga disponible el módulo {requirement.ModuleLabel} en el plan actual.";
+        return $"Requiere acceso habilitado al módulo {GetModuleLabel(requiredModule.Value)} para esta cuenta.";
     }
 
-    private PropertyFeatureModuleAvailabilityDto? GetModuleAvailability(string featureKey)
-        => _settings?.ModuleAvailability?.FirstOrDefault(x => x.FeatureKey == featureKey);
+    private bool HasModule(SaasModule module)
+        => _access?.Modules?.Any(x => x.Module == module && x.Allowed) ?? false;
+
+    private static string GetModuleLabel(SaasModule module)
+        => module switch
+        {
+            SaasModule.Rates => "Tarifas",
+            SaasModule.Promotions => "Promociones",
+            SaasModule.Payments => "Pagos",
+            SaasModule.Housekeeping => "Housekeeping",
+            SaasModule.Reports => "Reportes",
+            _ => module.ToString()
+        };
 
     private async Task Save()
     {

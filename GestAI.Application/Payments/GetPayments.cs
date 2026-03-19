@@ -14,13 +14,15 @@ public sealed class GetPaymentsQueryHandler : IRequestHandler<GetPaymentsQuery, 
     private readonly ICurrentUser _current;
     private readonly IUserAccessService _access;
     private readonly IPropertyFeatureService _features;
+    private readonly IUserAccessService _access;
 
-    public GetPaymentsQueryHandler(IAppDbContext db, ICurrentUser current, IUserAccessService access, IPropertyFeatureService features)
+    public GetPaymentsQueryHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features, IUserAccessService access)
     {
         _db = db;
         _current = current;
         _access = access;
         _features = features;
+        _access = access;
     }
 
     public async Task<AppResult<List<PaymentDto>>> Handle(GetPaymentsQuery request, CancellationToken ct)
@@ -28,12 +30,8 @@ public sealed class GetPaymentsQueryHandler : IRequestHandler<GetPaymentsQuery, 
         if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.Payments, ct))
             return AppResult<List<PaymentDto>>.Fail("feature_disabled", "La gestión de pagos está desactivada para este hospedaje.");
 
-        var property = await PropertyAuthorization.GetAccessiblePropertyAsync(_db, _current, request.PropertyId, ct);
-        if (property is null)
-            return AppResult<List<PaymentDto>>.Fail("forbidden", "Hospedaje inválido o sin acceso.");
-
-        if (!await _access.HasModuleAccessAsync(property.AccountId, SaasModule.Payments, ct))
-            return AppResult<List<PaymentDto>>.Fail("forbidden", "No tenés permisos para usar el módulo de pagos.");
+        if (!await _access.HasPropertyModuleAccessAsync(request.PropertyId, SaasModule.Payments, ct))
+            return AppResult<List<PaymentDto>>.Fail("forbidden", "No tenés acceso al módulo de pagos.");
 
         var exists = await _db.Bookings.AsNoTracking()
             .AnyAsync(b => b.Id == request.BookingId && b.PropertyId == request.PropertyId && (b.Property.Account.OwnerUserId == _current.UserId || b.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)), ct);

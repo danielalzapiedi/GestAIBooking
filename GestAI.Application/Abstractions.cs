@@ -60,6 +60,7 @@ public interface IUserAccessService
     Task<int?> GetCurrentAccountIdAsync(CancellationToken ct);
     Task<int?> GetDefaultPropertyIdAsync(CancellationToken ct);
     Task<bool> HasPropertyAccessAsync(int propertyId, CancellationToken ct);
+    Task<bool> HasPropertyModuleAccessAsync(int propertyId, GestAI.Domain.Enums.SaasModule module, CancellationToken ct);
     Task<GestAI.Domain.Entities.AccountUser?> GetMembershipAsync(int accountId, CancellationToken ct);
     Task<bool> HasModuleAccessAsync(int accountId, GestAI.Domain.Enums.SaasModule module, CancellationToken ct);
 }

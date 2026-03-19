@@ -44,6 +44,19 @@ public sealed class UserAccessService : IUserAccessService
         => await _db.Properties.AsNoTracking().AnyAsync(x => x.Id == propertyId &&
             (x.Account.OwnerUserId == _current.UserId || x.Account.Users.Any(u => u.UserId == _current.UserId && u.IsActive)), ct);
 
+    public async Task<bool> HasPropertyModuleAccessAsync(int propertyId, SaasModule module, CancellationToken ct)
+    {
+        var accountId = await _db.Properties.AsNoTracking()
+            .Where(x => x.Id == propertyId && (x.Account.OwnerUserId == _current.UserId || x.Account.Users.Any(u => u.UserId == _current.UserId && u.IsActive)))
+            .Select(x => (int?)x.AccountId)
+            .FirstOrDefaultAsync(ct);
+
+        if (!accountId.HasValue)
+            return false;
+
+        return await HasModuleAccessAsync(accountId.Value, module, ct);
+    }
+
     public async Task<AccountUser?> GetMembershipAsync(int accountId, CancellationToken ct)
         => await _db.AccountUsers.AsNoTracking().FirstOrDefaultAsync(x => x.AccountId == accountId && x.UserId == _current.UserId && x.IsActive, ct);
 
