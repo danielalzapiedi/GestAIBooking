@@ -48,6 +48,12 @@ else if (!FilteredBookings.Any())
 }
 else
 {
+    <div class="summary-pill-grid mb-3">
+        <div class="summary-pill"><div class="label">Reservas</div><div class="value">@FilteredBookings.Count</div></div>
+        <div class="summary-pill"><div class="label">Confirmadas</div><div class="value">@FilteredBookings.Count(x => x.Status == BookingStatus.Confirmed)</div></div>
+        <div class="summary-pill"><div class="label">Pendiente cobro</div><div class="value">@FilteredBookings.Count(x => x.PendingAmount > 0)</div></div>
+    </div>
+
     <div class="card">
         <div class="card-body">
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
@@ -77,13 +83,13 @@ else
                                 </td>
                                 <td>
                                     @booking.GuestName
-                                    <div class="small text-muted">@booking.Adults adultos · @booking.Children niños</div>
+                                    <div class="small text-muted">@GuestBreakdown(booking.Adults, booking.Children)</div>
                                 </td>
                                 <td>
                                     @booking.CheckInDate.ToString("dd/MM/yyyy")
                                     <div class="small text-muted">a @booking.CheckOutDate.ToString("dd/MM/yyyy")</div>
                                 </td>
-                                <td><StatusBadge Text="@booking.Status.ToString()" /></td>
+                                <td><StatusBadge Text="@BookingStatusLabel(booking.Status)" /></td>
                                 <td class="text-end">@booking.TotalAmount.ToString("0.00")</td>
                                 <td class="text-end">@booking.PendingAmount.ToString("0.00")</td>
                                 <td class="text-end">
@@ -165,4 +171,22 @@ else
     }
 
     private void ClearSearch() => _search = string.Empty;
+
+    private static string BookingStatusLabel(BookingStatus status) => status switch
+    {
+        BookingStatus.Inquiry => "Consulta",
+        BookingStatus.Tentative => "Tentativa",
+        BookingStatus.Confirmed => "Confirmada",
+        BookingStatus.CheckedIn => "Check-in",
+        BookingStatus.CheckedOut => "Check-out",
+        BookingStatus.Cancelled => "Cancelada",
+        _ => status.ToString()
+    };
+
+    private static string GuestBreakdown(int adults, int children)
+    {
+        var adultLabel = adults == 1 ? "adulto" : "adultos";
+        var childLabel = children == 1 ? "niño" : "niños";
+        return $"{adults} {adultLabel} · {children} {childLabel}";
+    }
 }
