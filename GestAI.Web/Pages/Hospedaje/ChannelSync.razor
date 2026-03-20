@@ -71,17 +71,27 @@ else
         <div class="col-6 col-xl-4">
             <div class="card h-100">
                 <div class="card-body">
-                    <div class="small text-uppercase text-muted fw-semibold mb-2">Último estado</div>
+                    <div class="small text-uppercase text-muted fw-semibold mb-2">Último sync exitoso</div>
                     <div class="display-6 fw-bold mb-1">@LastSuccessLabel</div>
-                    <div class="small text-muted">Última sincronización exitosa registrada.</div>
+                    <div class="small text-muted">Última sincronización exitosa registrada para este hospedaje.</div>
                 </div>
             </div>
         </div>
     </div>
 
+    @if (HasBlockedAutoSyncConnections)
+    {
+        <div class="alert alert-warning d-flex flex-column flex-md-row align-items-md-center gap-2 mb-3">
+            <div>
+                <div class="fw-semibold">Hay conexiones con auto sync marcado, pero el worker global está apagado.</div>
+                <div class="small">Las conexiones seguirán disponibles para sync manual hasta que se habilite `ExternalCalendarAutoSync:Enabled` en la API.</div>
+            </div>
+        </div>
+    }
+
     <div class="row g-3">
         <div class="col-lg-5">
-            <div class="card">
+            <div class="card" id="connection-form">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
                         <div>
@@ -223,7 +233,9 @@ else
                     {
                         <EmptyState Title="Todavía no hay conexiones externas"
                                     Description="Conectá el ICS de Booking o Airbnb para bloquear fechas externas y evitar overbooking."
-                                    Icon="bi-arrow-repeat" />
+                                    Icon="bi-arrow-repeat">
+                            <a class="btn btn-primary" href="#connection-form">Configurar primera conexión</a>
+                        </EmptyState>
                     }
                     else if (!FilteredConnections().Any())
                     {
@@ -266,7 +278,15 @@ else
                                                 <div class="small text-muted text-truncate" style="max-width:240px">@(!string.IsNullOrWhiteSpace(item.LastSyncMessage) ? item.LastSyncMessage : "Sin detalles todavía.")</div>
                                             </td>
                                             <td>
-                                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => CopyExportUrl(item)">Copiar URL</button>
+                                                <button class="btn btn-sm btn-outline-secondary"
+                                                        @onclick="() => CopyExportUrl(item)"
+                                                        disabled="@(!item.IsActive)">
+                                                    Copiar URL
+                                                </button>
+                                                @if (!item.IsActive)
+                                                {
+                                                    <div class="small text-muted mt-1">Disponible solo en conexiones activas.</div>
+                                                }
                                             </td>
                                             <td class="text-end">
                                                 <div class="btn-group btn-group-sm">
@@ -383,6 +403,7 @@ else
 
     private int VisibleConnectionsCount => FilteredConnections().Count();
     private int ActiveConnectionsCount => FilteredConnections().Count(x => x.IsActive);
+    private bool HasBlockedAutoSyncConnections => !AutoSyncWorkerEnabled && _connections.Any(x => x.IsActive && x.AutoSyncEnabled);
     private string LastSuccessLabel => _logs.FirstOrDefault(x => x.Status == ExternalSyncStatus.Success)?.CreatedAtUtc.ToLocalTime().ToString("dd/MM HH:mm") ?? "Sin éxito";
 
     protected override async Task OnParametersSetAsync()
@@ -500,6 +521,12 @@ else
 
     private async Task Deactivate(int id)
     {
+        var connection = _connections.FirstOrDefault(x => x.Id == id);
+        var displayName = connection?.DisplayName ?? "esta conexión";
+        var confirmed = await JS.InvokeAsync<bool>("confirm", $"¿Desactivar \"{displayName}\"? El link exportable dejará de responder y el sync manual quedará bloqueado.");
+        if (!confirmed)
+            return;
+
         var response = await Api.DeleteAsync<AppResult>($"api/properties/{PropertyId}/external-calendars/connections/{id}");
         _success = response?.Success == true;
         _message = _success ? "Conexión desactivada." : response?.Message ?? "No se pudo desactivar.";
