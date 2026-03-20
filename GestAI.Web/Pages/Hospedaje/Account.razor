@@ -26,12 +26,28 @@ else
                 <div class="card-body">
                     <h5 class="card-title">Datos generales</h5>
                     <div class="row g-3 align-items-end">
-                        <div class="col-12 col-md-7">
+                        <div class="col-12 col-lg-5">
                             <label class="form-label">Nombre de la cuenta</label>
                             <input class="form-control" @bind="_name" />
                         </div>
-                        <div class="col-12 col-md-5 d-flex justify-content-md-end">
-                            <button class="btn btn-primary" @onclick="Save"><i class="bi bi-check2"></i> Guardar cambios</button>
+                        <div class="col-12 col-lg-4">
+                            <label class="form-label">Plan contratado</label>
+                            <select class="form-select" @bind="_selectedPlanId">
+                                @if (!_planOptions.Any())
+                                {
+                                    <option value="">Sin opciones disponibles</option>
+                                }
+                                else
+                                {
+                                    @foreach (var plan in _planOptions)
+                                    {
+                                        <option value="@plan.Id">@PlanLabel(plan)</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+                        <div class="col-12 col-lg-3 d-flex justify-content-lg-end">
+                            <button class="btn btn-primary w-100 account-save-button" @onclick="Save"><i class="bi bi-check2"></i> Guardar cambios</button>
                         </div>
                     </div>
 
@@ -59,7 +75,47 @@ else
 
     <div class="card mb-3">
         <div class="card-body pt-3">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+                <div>
+                    <h5 class="card-title mb-1">Planes disponibles</h5>
+                    <div class="small text-muted">Compará capacidad y módulos antes de guardar un cambio de plan.</div>
+                </div>
+                <span class="text-muted small">@_planOptions.Count plan(es)</span>
+            </div>
+
+            @if (_planOptions.Any())
+            {
+                <div class="plan-option-grid mb-2">
+                    @foreach (var plan in _planOptions)
+                    {
+                        var isSelected = _selectedPlanId == plan.Id;
+                        <button type="button" class="plan-option-card @(isSelected ? "selected" : string.Empty)" @onclick="(() => SelectPlan(plan.Id))">
+                            <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
+                                <div>
+                                    <div class="fw-semibold">@plan.Name</div>
+                                    <div class="small text-muted">@PlanCodeLabel(plan.Code)</div>
+                                </div>
+                                @if (isSelected)
+                                {
+                                    <span class="ui-badge ui-badge-success">Seleccionado</span>
+                                }
+                            </div>
+                            <div class="summary-pill-grid compact mb-3">
+                                <div class="summary-pill"><div class="label">Hospedajes</div><div class="value">@plan.MaxProperties</div></div>
+                                <div class="summary-pill"><div class="label">Unidades</div><div class="value">@plan.MaxUnits</div></div>
+                                <div class="summary-pill"><div class="label">Usuarios</div><div class="value">@plan.MaxUsers</div></div>
+                            </div>
+                            <div class="plan-feature-list small">
+                                <span class="@(plan.IncludesReports ? "enabled" : "disabled")"><i class="bi @(plan.IncludesReports ? "bi-check-circle-fill" : "bi-x-circle")"></i> Reportes</span>
+                                <span class="@(plan.IncludesOperations ? "enabled" : "disabled")"><i class="bi @(plan.IncludesOperations ? "bi-check-circle-fill" : "bi-x-circle")"></i> Operación</span>
+                                <span class="@(plan.IncludesPublicPortal ? "enabled" : "disabled")"><i class="bi @(plan.IncludesPublicPortal ? "bi-check-circle-fill" : "bi-x-circle")"></i> Portal público</span>
+                            </div>
+                        </button>
+                    }
+                </div>
+            }
+
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2 mt-4">
                 <h5 class="card-title mb-0">Hospedajes de la cuenta</h5>
                 <span class="text-muted small">@_summary.Properties.Count hospedaje(s)</span>
             </div>
@@ -141,6 +197,7 @@ else
     private bool _loaded;
     private AccountSummaryDto? _summary;
     private List<AccountAuditItemDto> _audit = new();
+    private List<AccountPlanOptionDto> _planOptions = new();
     private string _name = string.Empty;
     private int? _selectedPlanId;
     private string? _auditEntityName;
@@ -155,8 +212,11 @@ else
     private async Task LoadAsync()
     {
         var summary = await Api.GetAsync<AppResult<AccountSummaryDto>>("api/saas/account/summary");
+        var plans = await Api.GetAsync<AppResult<List<AccountPlanOptionDto>>>("api/saas/account/plans");
         _summary = summary?.Data;
+        _planOptions = plans?.Data ?? new();
         _name = _summary?.Name ?? string.Empty;
+        _selectedPlanId = _planOptions.FirstOrDefault(x => x.Code == _summary?.PlanCode)?.Id;
         await LoadAudit();
         _loaded = true;
     }
@@ -180,10 +240,15 @@ else
 
     private async Task Save()
     {
+        if (!_planOptions.Any(x => x.Id == _selectedPlanId))
+            _selectedPlanId = null;
+
         await Api.PutAsync("api/saas/account", new UpdateAccountCommand(_name, _selectedPlanId));
         await LoadAsync();
         Api.Toast("Cuenta actualizada correctamente.");
     }
+
+    private void SelectPlan(int planId) => _selectedPlanId = planId;
 
     private void OnAuditFromChanged(ChangeEventArgs e)
         => _auditFrom = DateOnly.TryParse(e.Value?.ToString(), out var date) ? date : null;
@@ -211,5 +276,15 @@ else
         "activated" => "Activación",
         "deactivated" => "Desactivación",
         _ => action
+    };
+
+    private static string PlanLabel(AccountPlanOptionDto plan) => $"{plan.Name} · {plan.MaxProperties} hospedajes · {plan.MaxUnits} unidades · {plan.MaxUsers} usuarios";
+
+    private static string PlanCodeLabel(SaasPlanCode code) => code switch
+    {
+        SaasPlanCode.Starter => "Starter · base",
+        SaasPlanCode.Pro => "Pro · crecimiento",
+        SaasPlanCode.Manager => "Manager · multi-propiedad",
+        _ => code.ToString()
     };
 }

@@ -76,14 +76,23 @@
                 <div class="col-md-3"><label class="form-label">Rol</label><select class="form-select" @bind="_form.Role">@foreach (var role in Enum.GetValues<InternalUserRole>()){<option value="@role">@role</option>}</select></div>
                 <div class="col-md-3"><label class="form-label">Activo</label><select class="form-select" @bind="_form.IsActive"><option value="true">Sí</option><option value="false">No</option></select></div>
                 <div class="col-md-6"><label class="form-label">Hospedaje por defecto</label><select class="form-select" @bind="_form.DefaultPropertyId"><option value="">Sin definir</option>@foreach(var p in _properties){<option value="@p.Id">@p.Name</option>}</select></div>
-                @if (_form.UserId is null)
-                {
-                    <div class="col-md-6">
-                        <label class="form-label">Password temporal</label>
+                <div class="col-md-6">
+                    <label class="form-label">@(_form.UserId is null ? "Password temporal" : "Nueva contraseña temporal")</label>
+                    <div class="input-group">
                         <input class="form-control" @bind="_form.Password" />
-                        <div class="form-text">Se genera una clave temporal editable para evitar usar una contraseña fija repetida.</div>
+                        <button type="button" class="btn btn-outline-secondary" @onclick="GeneratePasswordForForm">Generar</button>
                     </div>
-                }
+                    <div class="form-text">
+                        @if (_form.UserId is null)
+                        {
+                            <span>Se crea con una clave temporal editable para evitar usar una contraseña fija repetida.</span>
+                        }
+                        else
+                        {
+                            <span>Opcional. Si completás este campo, la contraseña actual del usuario se reemplaza por una nueva temporal.</span>
+                        }
+                    </div>
+                </div>
             </div>
             <div class="mt-3 d-flex gap-2">
                 <button class="btn btn-primary" @onclick="Save">Guardar</button>
@@ -136,7 +145,7 @@
 
         _showForm = false;
         await LoadAsync();
-        Api.Toast("Usuario guardado correctamente.");
+        Api.Toast(string.IsNullOrWhiteSpace(_form.Password) ? "Usuario guardado correctamente." : "Usuario guardado y contraseña temporal actualizada.");
     }
 
     private async Task Toggle(AccountUserListItemDto item)
@@ -146,6 +155,8 @@
     }
 
     private void Cancel() => _showForm = false;
+
+    private void GeneratePasswordForForm() => _form.Password = GenerateTemporaryPassword();
 
     private static string GenerateTemporaryPassword()
         => $"Tmp{Guid.NewGuid():N}"[..12] + "!";

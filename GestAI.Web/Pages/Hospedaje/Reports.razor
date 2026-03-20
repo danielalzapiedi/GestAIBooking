@@ -31,15 +31,12 @@ else
                 <label class="form-label">Hasta</label>
                 <input class="form-control" type="date" value="@_toStr" @onchange="OnToChanged" />
             </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label">Año</label>
-                <input class="form-control" type="number" @bind="_year" />
+            <div class="col-12 col-md-3">
+                <div class="small text-muted pt-md-4">
+                    Todos los indicadores usan el mismo rango para evitar lecturas mezcladas entre ocupación e ingresos.
+                </div>
             </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label">Mes</label>
-                <input class="form-control" type="number" min="1" max="12" @bind="_month" />
-            </div>
-            <div class="col-12 col-md-2 text-md-end">
+            <div class="col-12 col-md-3 text-md-end">
                 <button class="btn btn-outline-primary w-100" @onclick="Load"><i class="bi bi-arrow-repeat"></i> Actualizar</button>
             </div>
         </div>
@@ -58,7 +55,7 @@ else
 {
     <div class="row g-3 mb-1">
         <div class="col-12 col-md-6 col-xl-3"><div class="card kpi-card"><div class="card-body"><div class="kpi-label">Ocupación</div><div class="kpi-value">@FormatPercent(_reports.Occupancy.OccupancyPercent)</div><div class="kpi-help">@_reports.Occupancy.NightsOccupied noches ocupadas de @_reports.Occupancy.TotalNightsAvailable disponibles.</div></div></div></div>
-        <div class="col-12 col-md-6 col-xl-3"><div class="card kpi-card"><div class="card-body"><div class="kpi-label">Ingresos cobrados</div><div class="kpi-value">@FormatMoney(_reports.Income.PaidIncome)</div><div class="kpi-help">Cobrado en @(_reports.Income.Month)/@(_reports.Income.Year).</div></div></div></div>
+        <div class="col-12 col-md-6 col-xl-3"><div class="card kpi-card"><div class="card-body"><div class="kpi-label">Ingresos cobrados</div><div class="kpi-value">@FormatMoney(_reports.Income.PaidIncome)</div><div class="kpi-help">Cobrado en el mismo período analizado.</div></div></div></div>
         <div class="col-12 col-md-6 col-xl-3"><div class="card kpi-card"><div class="card-body"><div class="kpi-label">Estadía promedio</div><div class="kpi-value">@_reports.Occupancy.AverageStayNights.ToString("0.##")</div><div class="kpi-help">Promedio de noches por reserva del período.</div></div></div></div>
         <div class="col-12 col-md-6 col-xl-3"><div class="card kpi-card"><div class="card-body"><div class="kpi-label">Ingreso promedio por noche</div><div class="kpi-value">@FormatMoney(_reports.Income.AverageIncomePerNight)</div><div class="kpi-help">Promedio cobrado por noche ocupada.</div></div></div></div>
     </div>
@@ -157,8 +154,6 @@ else
     private ReportsDto? _reports;
     private DateOnly _from = DateOnly.FromDateTime(DateTime.Today.AddDays(-30));
     private DateOnly _to = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
-    private int _year = DateTime.Today.Year;
-    private int _month = DateTime.Today.Month;
 
     private int MaxStatusCount => _reports?.BookingsByStatus.Count > 0 ? _reports.BookingsByStatus.Max(x => x.Count) : 0;
 
@@ -186,7 +181,7 @@ else
     private async Task Load()
     {
         _loaded = false;
-        _reports = (await Api.GetAsync<AppResult<ReportsDto>>($"api/properties/{PropertyId}/reports?from={_from:yyyy-MM-dd}&to={_to:yyyy-MM-dd}&year={_year}&month={_month}"))?.Data;
+        _reports = (await Api.GetAsync<AppResult<ReportsDto>>($"api/properties/{PropertyId}/reports?from={_from:yyyy-MM-dd}&to={_to:yyyy-MM-dd}"))?.Data;
         _loaded = true;
     }
 

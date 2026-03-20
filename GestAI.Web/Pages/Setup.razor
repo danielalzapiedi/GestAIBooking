@@ -96,6 +96,7 @@ else
     {
         null => "Reintentar",
         { HasAnyProperty: false } => "Crear hospedaje",
+        { HasAnyUnit: false, RecommendedPropertyId: not null } => "Crear primera unidad",
         { HasAnyUnit: false } => "Ir a hospedajes",
         { DefaultPropertyId: not null } => "Ir al dashboard",
         _ => "Elegir hospedaje"
@@ -105,6 +106,7 @@ else
     {
         null => "No hay suficiente información para sugerir el siguiente paso.",
         { HasAnyProperty: false } => "Todavía no hay hospedajes cargados. Empezá por crear el primer hospedaje de la cuenta.",
+        { HasAnyUnit: false, RecommendedPropertyId: not null } => "Ya existe un hospedaje de referencia, pero todavía faltan unidades activas. Te llevamos directo a crear la primera para destrabar reservas, tarifas y calendario.",
         { HasAnyUnit: false } => "Ya existe al menos un hospedaje, pero todavía faltan unidades activas para poder operar reservas.",
         { DefaultPropertyId: not null } => "Tu cuenta ya tiene un hospedaje por defecto configurado. Podés volver directo a la operación.",
         _ => "Ya hay datos cargados, pero falta elegir o confirmar un hospedaje de trabajo para seguir operando con claridad."
@@ -121,6 +123,12 @@ else
         if (!_status.HasAnyProperty)
         {
             Nav.NavigateTo("/properties/new");
+            return;
+        }
+
+        if (!_status.HasAnyUnit && _status.RecommendedPropertyId is not null)
+        {
+            Nav.NavigateTo($"/units/{_status.RecommendedPropertyId.Value}/new");
             return;
         }
 

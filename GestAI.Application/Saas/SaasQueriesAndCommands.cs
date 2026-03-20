@@ -69,6 +69,44 @@ public sealed class GetCurrentUserAccessQueryHandler : IRequestHandler<GetCurren
     }
 }
 
+public sealed class GetAccountPlanOptionsQueryHandler : IRequestHandler<GetAccountPlanOptionsQuery, AppResult<List<AccountPlanOptionDto>>>
+{
+    private readonly IAppDbContext _db;
+    private readonly IUserAccessService _access;
+
+    public GetAccountPlanOptionsQueryHandler(IAppDbContext db, IUserAccessService access)
+    {
+        _db = db;
+        _access = access;
+    }
+
+    public async Task<AppResult<List<AccountPlanOptionDto>>> Handle(GetAccountPlanOptionsQuery request, CancellationToken ct)
+    {
+        var accountId = await _access.GetCurrentAccountIdAsync(ct);
+        if (!accountId.HasValue) return AppResult<List<AccountPlanOptionDto>>.Fail("account_required", "No se encontró una cuenta activa.");
+        if (!await _access.HasModuleAccessAsync(accountId.Value, SaasModule.Configuration, ct))
+            return AppResult<List<AccountPlanOptionDto>>.Fail("forbidden", "No tenés permisos para administrar la cuenta.");
+
+        var plans = await _db.SaasPlanDefinitions.AsNoTracking()
+            .OrderBy(x => x.MaxProperties)
+            .ThenBy(x => x.MaxUnits)
+            .ThenBy(x => x.MaxUsers)
+            .Select(x => new AccountPlanOptionDto(
+                x.Id,
+                x.Code,
+                x.Name,
+                x.MaxProperties,
+                x.MaxUnits,
+                x.MaxUsers,
+                x.IncludesReports,
+                x.IncludesOperations,
+                x.IncludesPublicPortal))
+            .ToListAsync(ct);
+
+        return AppResult<List<AccountPlanOptionDto>>.Ok(plans);
+    }
+}
+
 public sealed class GetAccountSummaryQueryHandler : IRequestHandler<GetAccountSummaryQuery, AppResult<AccountSummaryDto>>
 {
     private readonly IAppDbContext _db;
@@ -187,6 +225,9 @@ public sealed class UpdateAccountCommandHandler : IRequestHandler<UpdateAccountC
                     ChangedAtUtc = DateTime.UtcNow
                 });
                 var planName = await _db.SaasPlanDefinitions.Where(x => x.Id == request.PlanDefinitionId.Value).Select(x => x.Name).FirstOrDefaultAsync(ct);
+                if (string.IsNullOrWhiteSpace(planName))
+                    return AppResult.Fail("plan_not_found", "El plan seleccionado no existe.");
+
                 auditMessages.Add($"Plan cambiado a {planName}");
             }
         }
@@ -259,6 +300,7 @@ public sealed class UpsertAccountUserCommandValidator : AbstractValidator<Upsert
         RuleFor(x => x.Apellido).NotEmpty().MaximumLength(100);
         RuleFor(x => x.Email).NotEmpty().EmailAddress().MaximumLength(200);
         RuleFor(x => x.Password).NotEmpty().MinimumLength(6).When(x => string.IsNullOrWhiteSpace(x.UserId));
+        RuleFor(x => x.Password).MinimumLength(6).When(x => !string.IsNullOrWhiteSpace(x.Password));
     }
 }
 
@@ -338,8 +380,16 @@ public sealed class UpsertAccountUserCommandHandler : IRequestHandler<UpsertAcco
         membership.User.NormalizedUserName = request.Email.Trim().ToUpperInvariant();
         membership.User.IsActive = request.IsActive;
         membership.User.DefaultPropertyId = request.DefaultPropertyId;
+
+        if (!string.IsNullOrWhiteSpace(request.Password))
+        {
+            var passwordReset = await _identity.ResetPasswordAsync(membership.UserId, request.Password.Trim(), ct);
+            if (!passwordReset.Success)
+                return AppResult<string>.Fail("password_reset_failed", passwordReset.Error ?? "No se pudo actualizar la contraseña del usuario.");
+        }
+
         await _db.SaveChangesAsync(ct);
-        await _audit.WriteAsync(accountId.Value, request.DefaultPropertyId, "AccountUser", null, "updated", $"Usuario actualizado: {request.Nombre} {request.Apellido} ({request.Email}) - rol {request.Role} - activo: {(request.IsActive ? "sí" : "no")}", ct);
+        await _audit.WriteAsync(accountId.Value, request.DefaultPropertyId, "AccountUser", null, "updated", $"Usuario actualizado: {request.Nombre} {request.Apellido} ({request.Email}) - rol {request.Role} - activo: {(request.IsActive ? "sí" : "no")}{(string.IsNullOrWhiteSpace(request.Password) ? string.Empty : " - contraseña regenerada")}", ct);
         return AppResult<string>.Ok(membership.UserId);
     }
 }

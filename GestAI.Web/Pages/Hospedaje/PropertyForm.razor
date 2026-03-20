@@ -44,7 +44,6 @@ else
                     <div class="col-md-4"><label class="form-label">Provincia</label><input class="form-control" @bind="_model.Province" /></div>
                     <div class="col-md-4"><label class="form-label">País</label><input class="form-control" @bind="_model.Country" /></div>
                     <div class="col-12"><label class="form-label">Dirección</label><input class="form-control" @bind="_model.Address" /></div>
-                    <div class="col-md-4"><label class="form-label">Slug público</label><input class="form-control" @bind="_model.PublicSlug" /></div>
                     <div class="col-md-4"><label class="form-label">Contacto comercial</label><input class="form-control" @bind="_model.CommercialContactName" /></div>
                     <div class="col-md-4"><label class="form-label">Teléfono comercial</label><input class="form-control" @bind="_model.CommercialContactPhone" /></div>
                     <div class="col-12"><label class="form-label">Email comercial</label><input class="form-control" @bind="_model.CommercialContactEmail" /></div>
@@ -56,7 +55,6 @@ else
             <div class="col-md-6"><div class="card"><div class="card-body pt-3"><label class="form-label">Instrucciones de check-in</label><textarea class="form-control" rows="4" @bind="_model.CheckInInstructions"></textarea></div></div></div>
             <div class="col-md-6"><div class="card"><div class="card-body pt-3"><label class="form-label">Reglas del hospedaje</label><textarea class="form-control" rows="4" @bind="_model.PropertyRules"></textarea></div></div></div>
             <div class="col-md-6"><div class="card"><div class="card-body pt-3"><label class="form-label">Términos y condiciones</label><textarea class="form-control" rows="4" @bind="_model.TermsAndConditions"></textarea></div></div></div>
-            <div class="col-md-6"><div class="card"><div class="card-body pt-3"><label class="form-label">Descripción pública</label><textarea class="form-control" rows="4" @bind="_model.PublicDescription"></textarea></div></div></div>
 
             <div class="col-12 d-flex justify-content-end gap-2">
                 <button type="button" class="btn btn-outline-secondary" @onclick='() => Nav.NavigateTo("/properties")'>Cancelar</button>
