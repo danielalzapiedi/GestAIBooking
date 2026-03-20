@@ -346,9 +346,15 @@ else
 
         try
         {
-            var unitsResponse = await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units");
-            var connectionsResponse = await Api.GetAsync<AppResult<List<ExternalCalendarConnectionDto>>>($"api/properties/{PropertyId}/external-calendars/connections");
-            var logsResponse = await Api.GetAsync<AppResult<List<ExternalSyncLogDto>>>($"api/properties/{PropertyId}/external-calendars/logs");
+            var unitsTask = Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units");
+            var connectionsTask = Api.GetAsync<AppResult<List<ExternalCalendarConnectionDto>>>($"api/properties/{PropertyId}/external-calendars/connections");
+            var logsTask = Api.GetAsync<AppResult<List<ExternalSyncLogDto>>>($"api/properties/{PropertyId}/external-calendars/logs");
+
+            await Task.WhenAll(unitsTask, connectionsTask, logsTask);
+
+            var unitsResponse = await unitsTask;
+            var connectionsResponse = await connectionsTask;
+            var logsResponse = await logsTask;
 
             if (unitsResponse?.Success != true || connectionsResponse?.Success != true || logsResponse?.Success != true)
             {
