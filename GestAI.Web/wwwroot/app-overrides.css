@@ -385,6 +385,17 @@ textarea.form-control {
 .ui-empty-state-description { margin-top: .35rem; color: var(--ui-text-soft); }
 .ui-empty-state-actions { margin-top: 1rem; }
 
+.ui-entry-shell {
+    min-height: calc(100vh - 160px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ui-entry-shell .ui-empty-state {
+    width: min(640px, 100%);
+}
+
 .ui-loading-overlay {
     position: fixed;
     inset: 0;
@@ -576,6 +587,32 @@ textarea.form-control {
 .app-sidebar .sidebar-nav .nav-content a.active i,
 .app-sidebar .sidebar-nav .nav-content a:hover i {
     background-color: transparent !important;
+}
+
+.channel-sync-toggle-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: .85rem;
+}
+
+.channel-sync-toggle-card {
+    display: flex;
+    gap: .75rem;
+    align-items: flex-start;
+    border: 1px solid var(--ui-border);
+    border-radius: 16px;
+    padding: .95rem 1rem;
+    background: #fff;
+    min-height: 100%;
+}
+
+.channel-sync-toggle-card .form-check-input {
+    margin-top: .15rem;
+}
+
+.channel-sync-toggle-card-disabled {
+    opacity: .72;
+    background: #fafbfc;
 }
 
 .kpi-card::after { background: rgba(255, 56, 92, .08); }

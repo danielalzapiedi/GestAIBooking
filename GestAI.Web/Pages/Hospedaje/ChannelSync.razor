@@ -4,185 +4,326 @@
 @inject NavigationManager Nav
 @inject GestAI.Web.Service.PropertyFeatureState FeatureState
 
-<PageTitleShared Title="Sincronización de canales" Subtitle="Importá calendarios ICS de Booking/Airbnb y exportá la disponibilidad de cada unidad." />
+<PageTitleShared Title="Sincronización de canales"
+                 Subtitle="Conectá calendarios ICS por unidad, importá bloqueos externos y compartí la disponibilidad exportable del hospedaje." />
 
 @if (!_featureChecked)
 {
-    <EmptyState Title="Cargando configuración" Description="Estamos validando las funciones habilitadas para este hospedaje." Icon="bi-hourglass-split" />
+    <EmptyState Title="Cargando configuración"
+                Description="Estamos validando las funciones habilitadas para este hospedaje."
+                Icon="bi-hourglass-split" />
 }
 else if (!_syncEnabled)
 {
-    <EmptyState Title="Funcionalidad desactivada" Description="La sincronización externa está desactivada para este hospedaje." Icon="bi-toggle-off" />
-    <button class="btn btn-outline-primary" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>Ir al dashboard</button>
+    <EmptyState Title="Funcionalidad desactivada"
+                Description="La sincronización externa está desactivada para este hospedaje. Activala desde Configuración funcional para usar canales externos."
+                Icon="bi-toggle-off">
+        <button class="btn btn-outline-primary" @onclick='() => Nav.NavigateTo($"/properties/{PropertyId}/features")'>Ir a configuración funcional</button>
+        <button class="btn btn-light border ms-2" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>Volver al dashboard</button>
+    </EmptyState>
+}
+else if (!_loaded && string.IsNullOrWhiteSpace(_loadError))
+{
+    <EmptyState Title="Preparando sincronización de canales"
+                Description="Estamos cargando unidades, conexiones, logs y la configuración operativa del worker."
+                Icon="bi-arrow-repeat" />
+}
+else if (!string.IsNullOrWhiteSpace(_loadError))
+{
+    <EmptyState Title="No pudimos cargar la sincronización externa"
+                Description="@_loadError"
+                Icon="bi-exclamation-triangle">
+        <button class="btn btn-outline-primary" @onclick="ReloadAsync">Reintentar</button>
+        <button class="btn btn-light border ms-2" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>Volver al dashboard</button>
+    </EmptyState>
 }
 else
 {
-<div class="row g-3">
-    <div class="col-lg-5">
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Nueva conexión</h5>
-                <div class="row g-3">
-                    <div class="col-12">
-                        <label class="form-label">Unidad</label>
-                        <select class="form-select" @bind="_formUnitId">
-                            <option value="0">-- Seleccionar --</option>
-                            @foreach (var unit in _units)
-                            {
-                                <option value="@unit.Id">@unit.Name</option>
-                            }
-                        </select>
+    <div class="row g-3 mb-3">
+        <div class="col-12 col-xl-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="small text-uppercase text-muted fw-semibold mb-2">Estado global</div>
+                    <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+                        <span class="ui-badge @(AutoSyncWorkerEnabled ? "ui-badge-success" : "ui-badge-warning")">
+                            <i class="bi @(AutoSyncWorkerEnabled ? "bi-check2-circle" : "bi-pause-circle")"></i>
+                            @(AutoSyncWorkerEnabled ? "Worker automático activo" : "Worker automático apagado")
+                        </span>
                     </div>
-                    <div class="col-12 col-md-6">
-                        <label class="form-label">Canal</label>
-                        <select class="form-select" @bind="_formChannelType">
-                            <option value="@ExternalChannelType.Booking">Booking</option>
-                            <option value="@ExternalChannelType.Airbnb">Airbnb</option>
-                            <option value="@ExternalChannelType.Other">Otro</option>
-                        </select>
-                    </div>
-                    <div class="col-12 col-md-6">
-                        <label class="form-label">Nombre visible</label>
-                        <input class="form-control" @bind="_formDisplayName" />
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label">URL ICS a importar</label>
-                        <input class="form-control" @bind="_formImportUrl" placeholder="https://.../calendar.ics" />
-                    </div>
-                    <div class="col-6">
-                        <div class="form-check mt-2">
-                            <input id="sync-active" type="checkbox" class="form-check-input" @bind="_formIsActive" />
-                            <label class="form-check-label" for="sync-active">Conexión activa</label>
-                        </div>
-                    </div>
-                    <div class="col-6">
-                        <div class="form-check mt-2">
-                            <input id="sync-auto" type="checkbox" class="form-check-input" @bind="_formAutoSync" />
-                            <label class="form-check-label" for="sync-auto">Auto sync habilitado para esta conexión</label>
-                        </div>
-                    </div>
-                    <div class="col-12 d-flex gap-2">
-                        <button class="btn btn-primary" @onclick="SaveConnection">Guardar conexión</button>
-                        <button class="btn btn-outline-secondary" @onclick="ResetForm">Limpiar</button>
+                    <div class="small text-muted">
+                        @(AutoSyncWorkerEnabled
+                            ? $"La API ejecuta auto sync cada {_config?.IntervalMinutes ?? 30} minutos."
+                            : "Las conexiones pueden guardarse, pero el auto sync no se ejecutará hasta habilitar la configuración global en la API.")
                     </div>
                 </div>
-                <div class="alert alert-info mt-3 mb-0">La sincronización automática requiere que la configuración global <code>ExternalCalendarAutoSync:Enabled</code> esté activa en la API.</div>
-
-                @if (!string.IsNullOrWhiteSpace(_message))
-                {
-                    <div class="alert @(_success ? "alert-success" : "alert-danger") mt-3 mb-0">@_message</div>
-                }
+            </div>
+        </div>
+        <div class="col-6 col-xl-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="small text-uppercase text-muted fw-semibold mb-2">Conexiones activas</div>
+                    <div class="display-6 fw-bold mb-1">@ActiveConnectionsCount</div>
+                    <div class="small text-muted">de @VisibleConnectionsCount visibles para el filtro actual.</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="small text-uppercase text-muted fw-semibold mb-2">Último estado</div>
+                    <div class="display-6 fw-bold mb-1">@LastSuccessLabel</div>
+                    <div class="small text-muted">Última sincronización exitosa registrada.</div>
+                </div>
             </div>
         </div>
     </div>
 
-    <div class="col-lg-7">
-        <div class="card">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-                    <h5 class="card-title mb-0">Conexiones configuradas</h5>
-                    <div class="d-flex gap-2">
-                        <select class="form-select form-select-sm" style="min-width:220px" @bind="_selectedUnitFilter">
-                            <option value="0">Todas las unidades</option>
-                            @foreach (var unit in _units)
-                            {
-                                <option value="@unit.Id">@unit.Name</option>
-                            }
-                        </select>
-                        <button class="btn btn-sm btn-outline-primary" @onclick="Load">Actualizar</button>
+    <div class="row g-3">
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
+                        <div>
+                            <h5 class="card-title mb-1">@(_editingId.HasValue ? "Editar conexión" : "Nueva conexión")</h5>
+                            <div class="small text-muted">Cada conexión corresponde a una unidad y una URL ICS externa.</div>
+                        </div>
+                        @if (_editingId.HasValue)
+                        {
+                            <span class="ui-badge ui-badge-info">Editando</span>
+                        }
                     </div>
-                </div>
 
-                @if (!_connections.Any())
-                {
-                    <EmptyState Title="Todavía no hay conexiones externas" Description="Conectá el ICS de Booking o Airbnb para bloquear fechas externas y evitar overbooking." Icon="bi-arrow-repeat" />
-                }
-                else
-                {
-                    <div class="table-responsive">
-                        <table class="table align-middle table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Unidad</th>
-                                    <th>Canal</th>
-                                    <th>Estado</th>
-                                    <th>Último sync</th>
-                                    <th>Exportación</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var item in FilteredConnections())
+                    @if (ValidationMessages.Count > 0)
+                    {
+                        <div class="alert alert-warning">
+                            <div class="fw-semibold mb-1">Antes de guardar, revisá lo siguiente:</div>
+                            <ul class="mb-0 ps-3">
+                                @foreach (var item in ValidationMessages)
                                 {
-                                    <tr>
-                                        <td>
-                                            <div class="fw-semibold">@item.UnitName</div>
-                                            <div class="small text-muted">@item.DisplayName</div>
-                                        </td>
-                                        <td><span class="badge @ChannelBadge(item.ChannelType)">@item.ChannelType</span></td>
-                                        <td>
-                                            <div><span class="badge @SyncBadge(item.LastSyncStatus)">@item.LastSyncStatus</span></div>
-                                            <div class="small text-muted">@(item.IsActive ? "Activa" : "Inactiva")</div>
-                                        </td>
-                                        <td>
-                                            <div>@(item.LastSyncAt?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "Nunca")</div>
-                                            <div class="small text-muted text-truncate" style="max-width:240px">@item.LastSyncMessage</div>
-                                        </td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => CopyExportUrl(item)">Copiar URL</button>
-                                        </td>
-                                        <td class="text-end">
-                                            <div class="btn-group btn-group-sm">
-                                                <button class="btn btn-outline-primary" @onclick="() => Edit(item)">Editar</button>
-                                                <button class="btn btn-outline-success" @onclick="() => SyncNow(item.Id)">Sincronizar</button>
-                                                <button class="btn btn-outline-danger" @onclick="() => Deactivate(item.Id)">Desactivar</button>
-                                            </div>
-                                        </td>
-                                    </tr>
+                                    <li>@item</li>
                                 }
-                            </tbody>
-                        </table>
+                            </ul>
+                        </div>
+                    }
+
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">Unidad</label>
+                            <select class="form-select @(ShowValidationState(_formUnitId <= 0) ? "is-invalid" : string.Empty)" @bind="_formUnitId">
+                                <option value="0">-- Seleccionar --</option>
+                                @foreach (var unit in _units)
+                                {
+                                    <option value="@unit.Id">@unit.Name</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Canal</label>
+                            <select class="form-select" @bind="_formChannelType">
+                                <option value="@ExternalChannelType.Booking">Booking</option>
+                                <option value="@ExternalChannelType.Airbnb">Airbnb</option>
+                                <option value="@ExternalChannelType.Other">Otro</option>
+                            </select>
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Nombre visible</label>
+                            <input class="form-control @(ShowValidationState(string.IsNullOrWhiteSpace(_formDisplayName)) ? "is-invalid" : string.Empty)"
+                                   @bind="_formDisplayName"
+                                   maxlength="200"
+                                   placeholder="Ej. Booking - Suite principal" />
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label">URL ICS a importar</label>
+                            <input class="form-control @(ShowValidationState(!IsImportUrlValid) ? "is-invalid" : string.Empty)"
+                                   @bind="_formImportUrl"
+                                   placeholder="https://.../calendar.ics" />
+                            <div class="form-text">Acepta URLs `http` o `https` publicadas por Booking, Airbnb u otro canal compatible.</div>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="channel-sync-toggle-grid">
+                                <label class="form-check channel-sync-toggle-card">
+                                    <input id="sync-active"
+                                           type="checkbox"
+                                           class="form-check-input"
+                                           checked="@_formIsActive"
+                                           @onchange="OnActiveChanged" />
+                                    <span>
+                                        <span class="d-block fw-semibold">Conexión activa</span>
+                                        <span class="small text-muted">Permite sincronizar manualmente y exportar el calendario.</span>
+                                    </span>
+                                </label>
+
+                                <label class="form-check channel-sync-toggle-card @(CanEditAutoSync ? string.Empty : "channel-sync-toggle-card-disabled")">
+                                    <input id="sync-auto"
+                                           type="checkbox"
+                                           class="form-check-input"
+                                           checked="@_formAutoSync"
+                                           disabled="@(!CanEditAutoSync)"
+                                           @onchange="OnAutoSyncChanged" />
+                                    <span>
+                                        <span class="d-block fw-semibold">Auto sync por conexión</span>
+                                        <span class="small text-muted">@AutoSyncHelperText</span>
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="col-12 d-flex gap-2 flex-wrap">
+                            <button class="btn btn-primary" @onclick="SaveConnection">Guardar conexión</button>
+                            <button class="btn btn-outline-secondary" @onclick="ResetForm">Limpiar</button>
+                        </div>
                     </div>
-                }
+
+                    @if (!string.IsNullOrWhiteSpace(_message))
+                    {
+                        <div class="alert @(_success ? "alert-success" : "alert-danger") mt-3 mb-0">@_message</div>
+                    }
+                </div>
             </div>
         </div>
 
-        <div class="card mt-3">
-            <div class="card-body">
-                <h5 class="card-title">Últimos logs</h5>
-                @if (!_logs.Any())
-                {
-                    <div class="text-muted">Todavía no hay sincronizaciones ejecutadas.</div>
-                }
-                else
-                {
-                    <div class="table-responsive">
-                        <table class="table table-sm align-middle mb-0">
-                            <thead><tr><th>Fecha</th><th>Estado</th><th>Procesados</th><th>Detalle</th></tr></thead>
-                            <tbody>
-                            @foreach (var log in _logs)
-                            {
-                                <tr>
-                                    <td>@log.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
-                                    <td><span class="badge @SyncBadge(log.Status)">@log.Status</span></td>
-                                    <td>@log.ProcessedEvents / +@log.ImportedEvents / ~@log.UpdatedEvents / -@log.CancelledEvents</td>
-                                    <td>@log.Message</td>
-                                </tr>
-                            }
-                            </tbody>
-                        </table>
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                        <div>
+                            <h5 class="card-title mb-1">Conexiones configuradas</h5>
+                            <div class="small text-muted">Gestioná el estado operativo de cada vínculo con canales externos.</div>
+                        </div>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <select class="form-select form-select-sm" style="min-width:220px" @bind="_selectedUnitFilter">
+                                <option value="0">Todas las unidades</option>
+                                @foreach (var unit in _units)
+                                {
+                                    <option value="@unit.Id">@unit.Name</option>
+                                }
+                            </select>
+                            <button class="btn btn-sm btn-outline-primary" @onclick="ReloadAsync">Actualizar</button>
+                        </div>
                     </div>
-                }
+
+                    @if (!_connections.Any())
+                    {
+                        <EmptyState Title="Todavía no hay conexiones externas"
+                                    Description="Conectá el ICS de Booking o Airbnb para bloquear fechas externas y evitar overbooking."
+                                    Icon="bi-arrow-repeat" />
+                    }
+                    else if (!FilteredConnections().Any())
+                    {
+                        <EmptyState Title="No hay conexiones para este filtro"
+                                    Description="Probá con otra unidad o quitá el filtro para ver el resto de las conexiones cargadas."
+                                    Icon="bi-funnel" />
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table align-middle table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Unidad</th>
+                                        <th>Canal</th>
+                                        <th>Estado</th>
+                                        <th>Último sync</th>
+                                        <th>Exportación</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var item in FilteredConnections())
+                                    {
+                                        <tr class="@(!item.IsActive ? "table-light" : string.Empty)">
+                                            <td>
+                                                <div class="fw-semibold">@item.UnitName</div>
+                                                <div class="small text-muted">@item.DisplayName</div>
+                                            </td>
+                                            <td>
+                                                <div><span class="badge @ChannelBadge(item.ChannelType)">@item.ChannelType</span></div>
+                                                <div class="small text-muted mt-1">@AutoSyncStatusLabel(item)</div>
+                                            </td>
+                                            <td>
+                                                <div><span class="badge @SyncBadge(item.LastSyncStatus)">@SyncStatusLabel(item.LastSyncStatus)</span></div>
+                                                <div class="small text-muted">@(item.IsActive ? "Activa" : "Inactiva")</div>
+                                            </td>
+                                            <td>
+                                                <div>@(item.LastSyncAt?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "Nunca")</div>
+                                                <div class="small text-muted text-truncate" style="max-width:240px">@(!string.IsNullOrWhiteSpace(item.LastSyncMessage) ? item.LastSyncMessage : "Sin detalles todavía.")</div>
+                                            </td>
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => CopyExportUrl(item)">Copiar URL</button>
+                                            </td>
+                                            <td class="text-end">
+                                                <div class="btn-group btn-group-sm">
+                                                    <button class="btn btn-outline-primary" @onclick="() => Edit(item)">Editar</button>
+                                                    <button class="btn btn-outline-success" @onclick="() => SyncNow(item.Id)" disabled="@(!item.IsActive)">Sincronizar</button>
+                                                    <button class="btn btn-outline-danger" @onclick="() => Deactivate(item.Id)" disabled="@(!item.IsActive)">Desactivar</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                        <div>
+                            <h5 class="card-title mb-1">Últimos logs</h5>
+                            <div class="small text-muted">Últimas 50 ejecuciones registradas por la API.</div>
+                        </div>
+                    </div>
+
+                    @if (!_logs.Any())
+                    {
+                        <div class="text-muted">Todavía no hay sincronizaciones ejecutadas.</div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Fecha</th>
+                                        <th>Estado</th>
+                                        <th>Procesados</th>
+                                        <th>Detalle</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var log in _logs)
+                                    {
+                                        <tr>
+                                            <td>@log.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                                            <td><span class="badge @SyncBadge(log.Status)">@SyncStatusLabel(log.Status)</span></td>
+                                            <td>@log.ProcessedEvents / +@log.ImportedEvents / ~@log.UpdatedEvents / -@log.CancelledEvents</td>
+                                            <td>@log.Message</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
             </div>
         </div>
     </div>
-</div>
 }
 
 @code {
     [Parameter] public int PropertyId { get; set; }
+
     private bool _featureChecked;
     private bool _syncEnabled = true;
+    private bool _loaded;
+    private string? _loadError;
+    private ExternalCalendarSyncConfigurationDto? _config;
     private List<UnitListItemDto> _units = new();
     private List<ExternalCalendarConnectionDto> _connections = new();
     private List<ExternalSyncLogDto> _logs = new();
@@ -194,37 +335,128 @@ else
     private string _formImportUrl = string.Empty;
     private bool _formIsActive = true;
     private bool _formAutoSync;
+    private bool _attemptedSave;
     private string? _message;
     private bool _success;
+
+    private bool AutoSyncWorkerEnabled => _config?.AutoSyncWorkerEnabled == true;
+    private bool CanEditAutoSync => _formIsActive && AutoSyncWorkerEnabled;
+    private bool IsImportUrlValid => Uri.TryCreate(_formImportUrl?.Trim(), UriKind.Absolute, out var uri)
+        && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+
+    private string AutoSyncHelperText
+        => !_formIsActive
+            ? "Primero activá la conexión para permitir sync automático."
+            : AutoSyncWorkerEnabled
+                ? $"Se procesará junto al worker global cada {_config?.IntervalMinutes ?? 30} minutos."
+                : "El worker global de la API está apagado. Esta opción queda informativa hasta habilitarlo.";
+
+    private IReadOnlyList<string> ValidationMessages
+    {
+        get
+        {
+            var errors = new List<string>();
+            if (_formUnitId <= 0)
+                errors.Add("Seleccioná una unidad del hospedaje.");
+            if (string.IsNullOrWhiteSpace(_formDisplayName))
+                errors.Add("Completá un nombre visible para identificar la conexión.");
+            if (string.IsNullOrWhiteSpace(_formImportUrl))
+                errors.Add("Pegá la URL ICS del canal.");
+            else if (!IsImportUrlValid)
+                errors.Add("La URL ICS debe ser absoluta y usar http o https.");
+            return errors;
+        }
+    }
+
+    private int VisibleConnectionsCount => FilteredConnections().Count();
+    private int ActiveConnectionsCount => FilteredConnections().Count(x => x.IsActive);
+    private string LastSuccessLabel => _logs.FirstOrDefault(x => x.Status == ExternalSyncStatus.Success)?.CreatedAtUtc.ToLocalTime().ToString("dd/MM HH:mm") ?? "Sin éxito";
 
     protected override async Task OnParametersSetAsync()
     {
         var settings = await FeatureState.EnsureAsync(PropertyId);
         _syncEnabled = settings?.EnableExternalCalendarSync ?? true;
         _featureChecked = true;
+
         if (_syncEnabled)
-            await Load();
+            await ReloadAsync();
     }
 
-    private async Task Load()
+    private async Task ReloadAsync()
     {
-        _units = (await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units"))?.Data ?? new();
-        _connections = (await Api.GetAsync<AppResult<List<ExternalCalendarConnectionDto>>>($"api/properties/{PropertyId}/external-calendars/connections"))?.Data ?? new();
-        _logs = (await Api.GetAsync<AppResult<List<ExternalSyncLogDto>>>($"api/properties/{PropertyId}/external-calendars/logs"))?.Data ?? new();
+        _loaded = false;
+        _loadError = null;
+
+        try
+        {
+            var unitsResponse = await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units");
+            var connectionsResponse = await Api.GetAsync<AppResult<List<ExternalCalendarConnectionDto>>>($"api/properties/{PropertyId}/external-calendars/connections");
+            var logsResponse = await Api.GetAsync<AppResult<List<ExternalSyncLogDto>>>($"api/properties/{PropertyId}/external-calendars/logs");
+            var configResponse = await Api.GetAsync<AppResult<ExternalCalendarSyncConfigurationDto>>($"api/properties/{PropertyId}/external-calendars/configuration");
+
+            if (unitsResponse?.Success != true || connectionsResponse?.Success != true || logsResponse?.Success != true || configResponse?.Success != true)
+            {
+                _loadError = connectionsResponse?.Message
+                    ?? logsResponse?.Message
+                    ?? unitsResponse?.Message
+                    ?? configResponse?.Message
+                    ?? "No pudimos cargar la sincronización externa para este hospedaje.";
+                return;
+            }
+
+            _units = unitsResponse.Data ?? new();
+            _connections = connectionsResponse.Data ?? new();
+            _logs = logsResponse.Data ?? new();
+            _config = configResponse.Data;
+        }
+        catch (Exception)
+        {
+            _loadError = "Hubo un problema al consultar unidades, conexiones o logs de sincronización.";
+        }
+        finally
+        {
+            _loaded = true;
+        }
     }
 
-    private IEnumerable<ExternalCalendarConnectionDto> FilteredConnections() => _selectedUnitFilter > 0 ? _connections.Where(x => x.UnitId == _selectedUnitFilter) : _connections;
+    private IEnumerable<ExternalCalendarConnectionDto> FilteredConnections()
+        => _selectedUnitFilter > 0
+            ? _connections.Where(x => x.UnitId == _selectedUnitFilter)
+            : _connections;
 
     private async Task SaveConnection()
     {
-        var command = new UpsertExternalCalendarConnectionCommand(PropertyId, _editingId, _formUnitId, _formChannelType, _formDisplayName, _formImportUrl, _formIsActive, _formAutoSync);
-        var response = await Api.PostAsync<UpsertExternalCalendarConnectionCommand, AppResult<int>>($"api/properties/{PropertyId}/external-calendars/connections", command);
+        _attemptedSave = true;
+        _message = null;
+
+        if (ValidationMessages.Count > 0)
+        {
+            _success = false;
+            _message = "Revisá los datos requeridos antes de guardar la conexión.";
+            return;
+        }
+
+        var command = new UpsertExternalCalendarConnectionCommand(
+            PropertyId,
+            _editingId,
+            _formUnitId,
+            _formChannelType,
+            _formDisplayName.Trim(),
+            _formImportUrl.Trim(),
+            _formIsActive,
+            _formAutoSync);
+
+        var response = await Api.PostAsync<UpsertExternalCalendarConnectionCommand, AppResult<int>>(
+            $"api/properties/{PropertyId}/external-calendars/connections",
+            command);
+
         _success = response?.Success == true;
         _message = _success ? "Conexión guardada correctamente." : response?.Message ?? "No se pudo guardar la conexión.";
+
         if (_success)
         {
             ResetForm();
-            await Load();
+            await ReloadAsync();
         }
     }
 
@@ -236,15 +468,21 @@ else
         _formDisplayName = item.DisplayName;
         _formImportUrl = item.ImportCalendarUrl;
         _formIsActive = item.IsActive;
-        _formAutoSync = item.AutoSyncEnabled;
+        _formAutoSync = item.IsActive && item.AutoSyncEnabled;
+        _attemptedSave = false;
+        _message = $"Editando la conexión \"{item.DisplayName}\".";
+        _success = true;
     }
 
     private async Task SyncNow(int id)
     {
-        var response = await Api.PostAsync<object, AppResult<ExternalSyncLogDto>>($"api/properties/{PropertyId}/external-calendars/connections/{id}/sync", new { });
+        var response = await Api.PostAsync<object, AppResult<ExternalSyncLogDto>>(
+            $"api/properties/{PropertyId}/external-calendars/connections/{id}/sync",
+            new { });
+
         _success = response?.Success == true;
         _message = _success ? response?.Data?.Message ?? "Sincronización ejecutada." : response?.Message ?? "No se pudo sincronizar.";
-        await Load();
+        await ReloadAsync();
     }
 
     private async Task Deactivate(int id)
@@ -252,7 +490,7 @@ else
         var response = await Api.DeleteAsync<AppResult>($"api/properties/{PropertyId}/external-calendars/connections/{id}");
         _success = response?.Success == true;
         _message = _success ? "Conexión desactivada." : response?.Message ?? "No se pudo desactivar.";
-        await Load();
+        await ReloadAsync();
     }
 
     private async Task CopyExportUrl(ExternalCalendarConnectionDto item)
@@ -271,7 +509,30 @@ else
         _formImportUrl = string.Empty;
         _formIsActive = true;
         _formAutoSync = false;
+        _attemptedSave = false;
+        _message = null;
+        _success = false;
     }
+
+    private void OnActiveChanged(ChangeEventArgs args)
+    {
+        _formIsActive = args.Value is bool value && value;
+        if (!_formIsActive)
+            _formAutoSync = false;
+    }
+
+    private void OnAutoSyncChanged(ChangeEventArgs args)
+    {
+        if (!CanEditAutoSync)
+        {
+            _formAutoSync = false;
+            return;
+        }
+
+        _formAutoSync = args.Value is bool value && value;
+    }
+
+    private bool ShowValidationState(bool invalid) => _attemptedSave && invalid;
 
     private static string ChannelBadge(ExternalChannelType channel) => channel switch
     {
@@ -287,4 +548,26 @@ else
         ExternalSyncStatus.Error => "bg-danger-subtle text-danger",
         _ => "bg-light text-dark border"
     };
+
+    private static string SyncStatusLabel(ExternalSyncStatus status) => status switch
+    {
+        ExternalSyncStatus.Success => "OK",
+        ExternalSyncStatus.Warning => "Atención",
+        ExternalSyncStatus.Error => "Error",
+        _ => "Nunca"
+    };
+
+    private string AutoSyncStatusLabel(ExternalCalendarConnectionDto item)
+    {
+        if (!item.IsActive)
+            return "La conexión está inactiva.";
+
+        if (!item.AutoSyncEnabled)
+            return "Solo sync manual.";
+
+        if (!AutoSyncWorkerEnabled)
+            return "Auto sync marcado, pero el worker global está apagado.";
+
+        return $"Auto sync activo cada {_config?.IntervalMinutes ?? 30} min.";
+    }
 }
