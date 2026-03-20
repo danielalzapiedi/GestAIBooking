@@ -3,32 +3,70 @@
 @inject NavigationManager Navigation
 @using GestAI.Web.Dtos
 
-@if (!_loaded)
-{
-    <p>Cargando...</p>
-}
+<div class="ui-entry-shell">
+    @if (!_loaded)
+    {
+        <EmptyState Title="Preparando tu espacio de trabajo"
+                    Description="Estamos verificando tu cuenta, hospedajes y configuración inicial para enviarte al siguiente paso."
+                    Icon="bi-stars" />
+    }
+    else if (_hasError)
+    {
+        <EmptyState Title="No pudimos iniciar la aplicación"
+                    Description="@_message"
+                    Icon="bi-exclamation-triangle">
+            <button class="btn btn-outline-primary" @onclick="RetryAsync">Reintentar</button>
+            <button class="btn btn-light border ms-2" @onclick="GoToLogin">Ir al login</button>
+        </EmptyState>
+    }
+</div>
 
 @code {
     private bool _loaded;
+    private bool _hasError;
+    private string? _message;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync() => await ResolveEntryAsync();
+
+    private async Task RetryAsync() => await ResolveEntryAsync();
+
+    private void GoToLogin() => Navigation.NavigateTo("/login", forceLoad: true);
+
+    private async Task ResolveEntryAsync()
     {
+        _loaded = false;
+        _hasError = false;
+        _message = null;
+
         try
         {
             var res = await Api.GetAsync<AppResult<SetupStatusDto>>("api/setup/status");
 
-            if (res?.Success == true && res.Data?.DefaultPropertyId != null)
+            if (res?.Success == true && res.Data?.DefaultPropertyId is not null)
             {
                 Navigation.NavigateTo($"/dashboard/{res.Data.DefaultPropertyId}");
+                return;
             }
-            else if (res?.Success == true && res.Data?.HasAnyProperty == true)
+
+            if (res?.Success == true && res.Data?.HasAnyProperty == true)
             {
                 Navigation.NavigateTo("/properties");
+                return;
             }
-            else
+
+            if (res?.Success == true)
             {
                 Navigation.NavigateTo("/setup");
+                return;
             }
+
+            _hasError = true;
+            _message = res?.Message ?? "No pudimos obtener el estado inicial de la cuenta.";
+        }
+        catch (Exception)
+        {
+            _hasError = true;
+            _message = "Hubo un problema de conexión al consultar la configuración inicial.";
         }
         finally
         {

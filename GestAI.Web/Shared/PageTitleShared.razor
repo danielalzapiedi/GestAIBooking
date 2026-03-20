@@ -1,6 +1,10 @@
 ﻿@* Encabezado estilo NiceAdmin *@
 <div class="pagetitle">
     <h1>@Title</h1>
+    @if (!string.IsNullOrWhiteSpace(Subtitle))
+    {
+        <p class="mb-0">@Subtitle</p>
+    }
     @if (Breadcrumbs?.Any() == true)
     {
         <nav>
@@ -23,6 +27,7 @@
 
 @code {
     [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string? Subtitle { get; set; }
     [Parameter] public List<BreadcrumbItem>? Breadcrumbs { get; set; }
 
     public sealed record BreadcrumbItem(string Text, string? Href = null);
