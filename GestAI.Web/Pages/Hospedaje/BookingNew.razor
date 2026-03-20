@@ -7,11 +7,23 @@
 
 <div class="pagetitle">
     <h1>@(BookingId.HasValue ? "Editar reserva" : "Nueva reserva")</h1>
+    <p class="text-muted mb-0">Registrá la estadía, asigná huésped y validá el total antes de confirmar la reserva.</p>
 </div>
 
 @if (!_loaded)
 {
-    <p>Cargando...</p>
+    <EmptyState Title="Cargando reserva"
+                Description="Estamos preparando unidades, huésped y cálculo tarifario para esta reserva."
+                Icon="bi-journal-bookmark" />
+}
+else if (_units.Count == 0)
+{
+    <EmptyState Title="Primero necesitás una unidad"
+                Description="No podés crear reservas hasta tener al menos una unidad activa en el hospedaje."
+                Icon="bi-house-door">
+        <button class="btn btn-primary" @onclick='() => Nav.NavigateTo($"/units/{PropertyId}")'>Ir a unidades</button>
+        <button class="btn btn-light border" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>Volver al dashboard</button>
+    </EmptyState>
 }
 else
 {
@@ -60,7 +72,7 @@ else
                             <select class="form-select" @bind="_source">
                                 @foreach (var source in AvailableSources)
                                 {
-                                    <option value="@source">@source</option>
+                                    <option value="@source">@BookingSourceLabel(source)</option>
                                 }
                             </select>
                         </div>
@@ -69,7 +81,7 @@ else
                             <select class="form-select" @bind="_status">
                                 @foreach (var status in Enum.GetValues<BookingStatus>())
                                 {
-                                    <option value="@status">@status</option>
+                                    <option value="@status">@BookingStatusLabel(status)</option>
                                 }
                             </select>
                         </div>
@@ -153,6 +165,20 @@ else
         </div>
 
         <div class="col-12 col-lg-4">
+            @if (_pricingPreview is not null)
+            {
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Resumen tarifario</h5>
+                        <div class="summary-pill-grid">
+                            <div class="summary-pill"><div class="label">Noches</div><div class="value">@BookingNights</div></div>
+                            <div class="summary-pill"><div class="label">Total</div><div class="value">@_pricingPreview.TotalAmount.ToString("0.00")</div></div>
+                            <div class="summary-pill"><div class="label">Seña sugerida</div><div class="value">@_pricingPreview.SuggestedDepositAmount.ToString("0.00")</div></div>
+                        </div>
+                    </div>
+                </div>
+            }
+
             <div class="card">
                 <div class="card-body">
                     <h5 class="card-title">Ayuda operativa</h5>
@@ -242,6 +268,7 @@ else
     private long _pricingRequestVersion;
     private bool _confirmManualPriceChange;
     private bool _confirmReduceStayWithPayments;
+    private int BookingNights => Math.Max(0, _checkOut.DayNumber - _checkIn.DayNumber);
 
     private string _checkInStr { get => _checkIn.ToString("yyyy-MM-dd"); set { if (DateOnly.TryParse(value, out var d)) _checkIn = d; } }
     private string _checkOutStr { get => _checkOut.ToString("yyyy-MM-dd"); set { if (DateOnly.TryParse(value, out var d)) _checkOut = d; } }
@@ -487,4 +514,27 @@ else
         _pricingError = res?.Message ?? "No se pudo calcular el total automáticamente.";
         _lastPricingRequestKey = null;
     }
+
+    private static string BookingSourceLabel(BookingSource source) => source switch
+    {
+        BookingSource.Direct => "Directo",
+        BookingSource.WhatsApp => "WhatsApp",
+        BookingSource.Booking => "Booking",
+        BookingSource.Airbnb => "Airbnb",
+        BookingSource.Phone => "Teléfono",
+        BookingSource.WalkIn => "Mostrador",
+        BookingSource.Other => "Otro",
+        _ => source.ToString()
+    };
+
+    private static string BookingStatusLabel(BookingStatus status) => status switch
+    {
+        BookingStatus.Inquiry => "Consulta",
+        BookingStatus.Tentative => "Tentativa",
+        BookingStatus.Confirmed => "Confirmada",
+        BookingStatus.CheckedIn => "Check-in",
+        BookingStatus.CheckedOut => "Check-out",
+        BookingStatus.Cancelled => "Cancelada",
+        _ => status.ToString()
+    };
 }
