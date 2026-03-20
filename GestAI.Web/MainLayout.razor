@@ -323,35 +323,10 @@
 
     protected override void OnInitialized()
     {
-        Api.OnBusyChanged += busy =>
-        {
-            IsBusy = busy;
-            InvokeAsync(StateHasChanged);
-        };
-
-        Api.OnToast += message =>
-        {
-            if (string.IsNullOrWhiteSpace(message))
-                return;
-
-            _toasts.Insert(0, message.Trim());
-            if (_toasts.Count > 4)
-                _toasts.RemoveAt(_toasts.Count - 1);
-
-            InvokeAsync(StateHasChanged);
-        };
-
+        Api.OnBusyChanged += HandleBusyChanged;
+        Api.OnToast += HandleToast;
         FeatureState.FeaturesChanged += OnFeaturesChanged;
-
-        Navigation.LocationChanged += (_, __) =>
-        {
-            _ = InvokeAsync(async () =>
-            {
-                await LoadFeatureSettings();
-                SyncMenuFromUrl();
-                StateHasChanged();
-            });
-        };
+        Navigation.LocationChanged += HandleLocationChanged;
     }
 
     protected override async Task OnInitializedAsync()
@@ -441,9 +416,36 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        await Task.Delay(2000);
         if (firstRender)
             await JS.InvokeVoidAsync("reloadNiceAdmin");
+    }
+
+    private void HandleBusyChanged(bool busy)
+    {
+        IsBusy = busy;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleToast(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return;
+
+        _toasts.Insert(0, message.Trim());
+        if (_toasts.Count > 4)
+            _toasts.RemoveAt(_toasts.Count - 1);
+
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs args)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            await LoadFeatureSettings();
+            SyncMenuFromUrl();
+            StateHasChanged();
+        });
     }
 
     private async Task LoadSetupStatus()
@@ -568,6 +570,9 @@
 
     public void Dispose()
     {
+        Api.OnBusyChanged -= HandleBusyChanged;
+        Api.OnToast -= HandleToast;
         FeatureState.FeaturesChanged -= OnFeaturesChanged;
+        Navigation.LocationChanged -= HandleLocationChanged;
     }
 }

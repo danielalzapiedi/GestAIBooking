@@ -61,6 +61,42 @@ public sealed class GetQuoteQueryHandler :
         var units = await unitsQuery.OrderBy(x => x.DisplayOrder).ThenBy(x => x.Name).ToListAsync(ct);
         var available = new List<QuoteAvailableUnitDto>();
         var globalMessages = new List<string>();
+        var unitIds = units.Select(x => x.Id).ToList();
+
+        var bookedUnitIds = await _db.Bookings.AsNoTracking()
+            .Where(b => b.PropertyId == request.PropertyId
+                && unitIds.Contains(b.UnitId)
+                && b.Status != BookingStatus.Cancelled
+                && b.CheckInDate < request.CheckOutDate
+                && request.CheckInDate < b.CheckOutDate)
+            .Select(b => b.UnitId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        var blockedUnitIds = await _db.BlockedDates.AsNoTracking()
+            .Where(x => x.PropertyId == request.PropertyId
+                && unitIds.Contains(x.UnitId)
+                && x.DateFrom < request.CheckOutDate
+                && request.CheckInDate < x.DateTo)
+            .Select(x => x.UnitId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        var externalBusyUnitIds = await _db.ExternalCalendarEvents.AsNoTracking()
+            .Where(x => x.PropertyId == request.PropertyId
+                && unitIds.Contains(x.UnitId)
+                && !x.IsCancelled
+                && x.ExternalChannelConnection.IsActive
+                && x.StartDate < request.CheckOutDate
+                && request.CheckInDate < x.EndDate)
+            .Select(x => x.UnitId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        var unavailableUnitIds = bookedUnitIds
+            .Concat(blockedUnitIds)
+            .Concat(externalBusyUnitIds)
+            .ToHashSet();
 
         foreach (var unit in units)
         {
@@ -70,20 +106,7 @@ public sealed class GetQuoteQueryHandler :
                 continue;
             }
 
-            var overlapBooking = await _db.Bookings.AsNoTracking()
-                .Where(b => b.PropertyId == request.PropertyId && b.UnitId == unit.Id && b.Status != BookingStatus.Cancelled)
-                .AnyAsync(b => b.CheckInDate < request.CheckOutDate && request.CheckInDate < b.CheckOutDate, ct);
-
-            var overlapBlock = await _db.BlockedDates.AsNoTracking()
-                .Where(x => x.PropertyId == request.PropertyId && x.UnitId == unit.Id)
-                .AnyAsync(b => b.DateFrom < request.CheckOutDate && request.CheckInDate < b.DateTo, ct);
-
-            var overlapExternal = await _db.ExternalCalendarEvents.AsNoTracking()
-                .Where(x => x.PropertyId == request.PropertyId && x.UnitId == unit.Id && !x.IsCancelled)
-                .Where(x => x.ExternalChannelConnection.IsActive)
-                .AnyAsync(x => x.StartDate < request.CheckOutDate && request.CheckInDate < x.EndDate, ct);
-
-            if (overlapBooking || overlapBlock || overlapExternal)
+            if (unavailableUnitIds.Contains(unit.Id))
             {
                 globalMessages.Add($"{unit.Name}: no disponible para el rango solicitado.");
                 continue;
