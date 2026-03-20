@@ -12,8 +12,8 @@
 }
 else if (!_housekeepingEnabled)
 {
-    <EmptyState Title="Funcionalidad desactivada" Description="Housekeeping está desactivado para este hospedaje." Icon="bi-toggle-off" />
-    <button class="btn btn-outline-primary" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>Ir al dashboard</button>
+    <FeatureDisabledState PropertyId="@PropertyId"
+                          FeatureName="Housekeeping" />
 }
 else
 {

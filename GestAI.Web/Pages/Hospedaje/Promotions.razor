@@ -1,7 +1,6 @@
 @page "/promotions/{PropertyId:int}"
 @using GestAI.Web.Dtos
 @inject ApiClient Api
-@inject NavigationManager Nav
 @inject GestAI.Web.Service.PropertyFeatureState FeatureState
 
 <PageTitle>Promociones</PageTitle>
@@ -12,8 +11,8 @@
 }
 else if (!_promotionsEnabled)
 {
-    <EmptyState Title="Funcionalidad desactivada" Description="Las promociones están desactivadas para este hospedaje." Icon="bi-toggle-off" />
-    <button class="btn btn-outline-primary" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>Ir al dashboard</button>
+    <FeatureDisabledState PropertyId="@PropertyId"
+                          FeatureName="Las promociones" />
 }
 else
 {

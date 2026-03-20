@@ -298,6 +298,7 @@
     private string _email = "";
     private string _initials = "?";
     private bool _propertiesLoaded;
+    private bool _featureSettingsLoaded;
     private List<PropertyListItemDto> _properties = new();
     private CurrentUserAccessDto? _access;
     private PropertyFeatureSettingsDto? _featureSettings;
@@ -397,7 +398,9 @@
         }
 
         _defaultPropertyId = propertyId;
+        _featureSettingsLoaded = false;
         _featureSettings = await FeatureState.RefreshAsync(propertyId);
+        _featureSettingsLoaded = true;
         Navigation.NavigateTo($"/dashboard/{propertyId}", forceLoad: false);
         SyncMenuFromUrl();
         StateHasChanged();
@@ -502,10 +505,13 @@
         if (_defaultPropertyId is null)
         {
             _featureSettings = null;
+            _featureSettingsLoaded = true;
             return;
         }
 
+        _featureSettingsLoaded = false;
         _featureSettings = await FeatureState.EnsureAsync(_defaultPropertyId.Value);
+        _featureSettingsLoaded = true;
     }
 
     private void OnFeaturesChanged()
@@ -521,7 +527,15 @@
     }
 
     private bool IsFeatureEnabled(Func<PropertyFeatureSettingsDto, bool> selector)
-        => _featureSettings is null || selector(_featureSettings);
+    {
+        if (_defaultPropertyId is null)
+            return false;
+
+        if (!_featureSettingsLoaded)
+            return false;
+
+        return _featureSettings is not null && selector(_featureSettings);
+    }
 
     private bool HasModule(SaasModule module) => _access?.Modules?.Any(x => x.Module == module && x.Allowed) ?? false;
     private string RoleLabel => _access?.IsOwner == true ? "Propietario" : (_access?.Role?.ToString() switch { "Admin" => "Administrador", "Reception" => "Recepción", "Operations" => "Operaciones", _ => "Usuario" });

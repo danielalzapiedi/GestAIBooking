@@ -13,8 +13,8 @@
 }
 else if (!_advancedRatesEnabled)
 {
-    <EmptyState Title="Funcionalidad desactivada" Description="Las tarifas avanzadas están desactivadas para este hospedaje." Icon="bi-toggle-off" />
-    <button class="btn btn-outline-primary" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>Ir al dashboard</button>
+    <FeatureDisabledState PropertyId="@PropertyId"
+                          FeatureName="Las tarifas avanzadas" />
 }
 else
 {

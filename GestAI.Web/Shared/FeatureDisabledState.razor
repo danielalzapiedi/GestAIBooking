@@ -1,0 +1,25 @@
+@inject NavigationManager Nav
+
+<EmptyState Title="Funcionalidad desactivada"
+            Description="@ResolvedDescription"
+            Icon="bi-toggle-off">
+    <button class="btn btn-outline-primary" @onclick='() => Nav.NavigateTo($"/properties/{PropertyId}/features")'>
+        Ir a configuración funcional
+    </button>
+    <button class="btn btn-light border" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>
+        Volver al dashboard
+    </button>
+</EmptyState>
+
+@code {
+    [Parameter] public int PropertyId { get; set; }
+    [Parameter] public string? FeatureName { get; set; }
+    [Parameter] public string? Description { get; set; }
+
+    private string ResolvedDescription
+        => !string.IsNullOrWhiteSpace(Description)
+            ? Description!
+            : string.IsNullOrWhiteSpace(FeatureName)
+                ? "Esta funcionalidad está desactivada para este hospedaje."
+                : $"{FeatureName} está desactivada para este hospedaje. Activala desde Configuración funcional para volver a usarla.";
+}

@@ -2,7 +2,6 @@
 @using GestAI.Web.Dtos
 @inject ApiClient Api
 @inject IJSRuntime JS
-@inject NavigationManager Nav
 @inject GestAI.Web.Service.PropertyFeatureState FeatureState
 
 <PageTitle>Templates</PageTitle>
@@ -13,8 +12,8 @@
 }
 else if (!_templatesEnabled)
 {
-    <EmptyState Title="Funcionalidad desactivada" Description="Las plantillas están desactivadas para este hospedaje." Icon="bi-toggle-off" />
-    <button class="btn btn-outline-primary" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>Ir al dashboard</button>
+    <FeatureDisabledState PropertyId="@PropertyId"
+                          FeatureName="Las plantillas" />
 }
 else
 {

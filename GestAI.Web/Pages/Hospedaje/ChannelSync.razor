@@ -93,6 +93,17 @@ else
                         }
                     </div>
 
+                    @if (_units.Count == 0)
+                    {
+                        <EmptyState Title="Primero cargá una unidad"
+                                    Description="La sincronización externa se configura por unidad. Creá al menos una unidad activa antes de conectar calendarios ICS."
+                                    Icon="bi-house-door">
+                            <button class="btn btn-primary" @onclick='() => Nav.NavigateTo($"/units/{PropertyId}")'>Ir a unidades</button>
+                            <button class="btn btn-light border" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>Volver al dashboard</button>
+                        </EmptyState>
+                    }
+                    else
+                    {
                     @if (ValidationMessages.Count > 0)
                     {
                         <div class="alert alert-warning">
@@ -177,6 +188,7 @@ else
                             <button class="btn btn-outline-secondary" @onclick="ResetForm">Limpiar</button>
                         </div>
                     </div>
+                    }
 
                     @if (!string.IsNullOrWhiteSpace(_message))
                     {
