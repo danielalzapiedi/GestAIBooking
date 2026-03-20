@@ -38,6 +38,12 @@
         }
         else
         {
+            <div class="summary-pill-grid mb-3">
+                <div class="summary-pill"><div class="label">Usuarios</div><div class="value">@_items.Count</div></div>
+                <div class="summary-pill"><div class="label">Activos</div><div class="value">@_items.Count(x => x.IsActive)</div></div>
+                <div class="summary-pill"><div class="label">Con hospedaje</div><div class="value">@_items.Count(x => x.DefaultPropertyId.HasValue)</div></div>
+            </div>
+
             <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
                 <div>
                     <h5 class="card-title mb-1">Usuarios de la cuenta</h5>
@@ -97,7 +103,7 @@
                 <div class="col-md-6"><label class="form-label">Email</label><input class="form-control" @bind="_form.Email" /></div>
                 <div class="col-md-3"><label class="form-label">Rol</label><select class="form-select" @bind="_form.Role">@foreach (var role in Enum.GetValues<InternalUserRole>()){<option value="@role">@RoleLabel(role)</option>}</select></div>
                 <div class="col-md-3"><label class="form-label">Activo</label><select class="form-select" @bind="_form.IsActive"><option value="true">Sí</option><option value="false">No</option></select></div>
-                <div class="col-md-6"><label class="form-label">Hospedaje por defecto</label><select class="form-select" @bind="_form.DefaultPropertyId"><option value="">Sin definir</option>@foreach(var p in _properties){<option value="@p.Id">@p.Name</option>}</select></div>
+                <div class="col-md-6"><label class="form-label">Hospedaje por defecto</label><select class="form-select" @bind="_form.DefaultPropertyId"><option value="">Sin definir</option>@foreach(var p in _properties){<option value="@p.Id">@p.Name</option>}</select><div class="form-text">Podés dejarlo vacío si el usuario trabaja en más de un hospedaje.</div></div>
                 <div class="col-md-6">
                     <label class="form-label">@(_form.UserId is null ? "Password temporal" : "Nueva contraseña temporal")</label>
                     <div class="input-group">
@@ -181,6 +187,34 @@
     private async Task Save()
     {
         _error = null;
+        _form.Nombre = _form.Nombre.Trim();
+        _form.Apellido = _form.Apellido.Trim();
+        _form.Email = _form.Email.Trim();
+
+        if (string.IsNullOrWhiteSpace(_form.Nombre))
+        {
+            _error = "Ingresá el nombre del usuario.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_form.Apellido))
+        {
+            _error = "Ingresá el apellido del usuario.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_form.Email) || !_form.Email.Contains('@'))
+        {
+            _error = "Ingresá un email válido para el usuario.";
+            return;
+        }
+
+        if (_form.UserId is null && string.IsNullOrWhiteSpace(_form.Password))
+        {
+            _error = "Generá o ingresá una contraseña temporal para crear el usuario.";
+            return;
+        }
+
         _saving = true;
 
         AppResult? response;
