@@ -27,7 +27,7 @@ public sealed class GetSetupStatusQueryHandler : IRequestHandler<GetSetupStatusQ
     public async Task<AppResult<SetupStatusDto>> Handle(GetSetupStatusQuery request, CancellationToken ct)
     {
         var user = await _db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == _current.UserId, ct);
-        var defaultPropertyId = user?.DefaultPropertyId;
+        var requestedDefaultPropertyId = user?.DefaultPropertyId;
         var defaultAccountId = user?.DefaultAccountId;
 
         var activePropertyIds = await _db.Properties.AsNoTracking()
@@ -39,6 +39,9 @@ public sealed class GetSetupStatusQueryHandler : IRequestHandler<GetSetupStatusQ
         var hasAnyAccount = await _db.Accounts.AsNoTracking().AnyAsync(a => (a.OwnerUserId == _current.UserId || a.Users.Any(au => au.UserId == _current.UserId && au.IsActive)) && a.IsActive, ct);
         var hasAnyProperty = activePropertyIds.Count > 0;
         var hasAnyUnit = await _db.Units.AsNoTracking().AnyAsync(u => (u.Property.Account.OwnerUserId == _current.UserId || u.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)) && u.IsActive, ct);
+        var defaultPropertyId = requestedDefaultPropertyId.HasValue && activePropertyIds.Contains(requestedDefaultPropertyId.Value)
+            ? requestedDefaultPropertyId
+            : null;
         var recommendedPropertyId = defaultPropertyId ?? (activePropertyIds.Count == 1 ? activePropertyIds[0] : null);
 
         int? defaultUnitId = null;

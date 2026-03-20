@@ -33,6 +33,30 @@ public class AccountUserPasswordResetTests
         Assert.Equal("TmpReset123!", identity.ResetPasswordValue);
     }
 
+    [Fact]
+    public async Task UpsertAccountUser_Should_Fail_When_Update_Uses_Email_Already_Assigned_To_Other_User()
+    {
+        await using var db = CreateDbContext(nameof(UpsertAccountUser_Should_Fail_When_Update_Uses_Email_Already_Assigned_To_Other_User));
+        SeedScenario(db);
+
+        var identity = new FakeIdentityService();
+        identity.RegisterExistingEmail("owner@test.com", "owner-1");
+
+        var handler = new UpsertAccountUserCommandHandler(
+            db,
+            identity,
+            new FakeUserAccessService(),
+            new FakePlanService(),
+            new FakeAuditService());
+
+        var command = new UpsertAccountUserCommand("user-2", "Reception", "Updated", "owner@test.com", true, InternalUserRole.Reception, 1, null);
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal("email_exists", result.ErrorCode);
+        Assert.False(identity.ResetPasswordCalled);
+    }
+
     private static AppDbContext CreateDbContext(string dbName)
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -59,9 +83,14 @@ public class AccountUserPasswordResetTests
 
     private sealed class FakeIdentityService : IIdentityService
     {
+        private readonly Dictionary<string, string> _emails = new(StringComparer.OrdinalIgnoreCase);
+
         public bool ResetPasswordCalled { get; private set; }
         public string? ResetPasswordUserId { get; private set; }
         public string? ResetPasswordValue { get; private set; }
+
+        public void RegisterExistingEmail(string email, string userId)
+            => _emails[email] = userId;
 
         public Task<(bool Success, string? UserId, string? Error)> CreateUserIfNotExistsAsync(string email, string password, CancellationToken ct)
             => Task.FromResult((true, "new-user", (string?)null));
@@ -70,7 +99,9 @@ public class AccountUserPasswordResetTests
             => Task.FromResult((true, "new-user", (string?)null));
 
         public Task<(bool Success, string? UserId, string? Error)> FindUserIdByEmailAsync(string email, CancellationToken ct)
-            => Task.FromResult((true, (string?)null, (string?)null));
+            => Task.FromResult(_emails.TryGetValue(email, out var userId)
+                ? (true, userId, (string?)null)
+                : (true, (string?)null, (string?)null));
 
         public Task<(bool Success, string? Error)> ResetPasswordAsync(string userId, string newPassword, CancellationToken ct)
         {

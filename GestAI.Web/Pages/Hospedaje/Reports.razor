@@ -29,7 +29,7 @@ else
             </div>
             <div class="col-12 col-md-3">
                 <label class="form-label">Hasta</label>
-                <input class="form-control" type="date" value="@_toStr" @onchange="OnToChanged" />
+                <input class="form-control" type="date" value="@_toInclusiveStr" @onchange="OnToChanged" />
             </div>
             <div class="col-12 col-md-3">
                 <div class="small text-muted pt-md-4">
@@ -153,7 +153,7 @@ else
     private bool _loaded;
     private ReportsDto? _reports;
     private DateOnly _from = DateOnly.FromDateTime(DateTime.Today.AddDays(-30));
-    private DateOnly _to = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+    private DateOnly _toInclusive = DateOnly.FromDateTime(DateTime.Today);
 
     private int MaxStatusCount => _reports?.BookingsByStatus.Count > 0 ? _reports.BookingsByStatus.Max(x => x.Count) : 0;
 
@@ -163,10 +163,10 @@ else
         set { if (DateOnly.TryParse(value, out var d)) _from = d; }
     }
 
-    private string _toStr
+    private string _toInclusiveStr
     {
-        get => _to.ToString("yyyy-MM-dd");
-        set { if (DateOnly.TryParse(value, out var d)) _to = d; }
+        get => _toInclusive.ToString("yyyy-MM-dd");
+        set { if (DateOnly.TryParse(value, out var d)) _toInclusive = d; }
     }
 
     protected override async Task OnParametersSetAsync()
@@ -181,7 +181,8 @@ else
     private async Task Load()
     {
         _loaded = false;
-        _reports = (await Api.GetAsync<AppResult<ReportsDto>>($"api/properties/{PropertyId}/reports?from={_from:yyyy-MM-dd}&to={_to:yyyy-MM-dd}"))?.Data;
+        var toExclusive = _toInclusive.AddDays(1);
+        _reports = (await Api.GetAsync<AppResult<ReportsDto>>($"api/properties/{PropertyId}/reports?from={_from:yyyy-MM-dd}&to={toExclusive:yyyy-MM-dd}"))?.Data;
         _loaded = true;
     }
 
@@ -192,7 +193,7 @@ else
 
     private void OnToChanged(ChangeEventArgs e)
     {
-        if (DateOnly.TryParse(e.Value?.ToString(), out var d)) _to = d;
+        if (DateOnly.TryParse(e.Value?.ToString(), out var d)) _toInclusive = d;
     }
 
     private static string FormatMoney(decimal value) => value.ToString("0.00");

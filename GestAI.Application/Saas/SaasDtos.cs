@@ -48,6 +48,8 @@ public sealed record UpdateAccountCommand(string Name, int? PlanDefinitionId) : 
 
 public sealed record AccountUserListItemDto(
     string UserId,
+    string Nombre,
+    string Apellido,
     string DisplayName,
     string Email,
     bool IsActive,

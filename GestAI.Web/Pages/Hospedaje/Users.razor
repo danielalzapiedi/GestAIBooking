@@ -131,8 +131,7 @@
 
     private void Edit(AccountUserListItemDto item)
     {
-        var names = item.DisplayName.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
-        _form = new UpsertAccountUserCommand(item.UserId, names.FirstOrDefault() ?? item.DisplayName, names.Skip(1).FirstOrDefault() ?? "", item.Email, item.IsActive, item.Role, item.DefaultPropertyId, null);
+        _form = new UpsertAccountUserCommand(item.UserId, item.Nombre, item.Apellido, item.Email, item.IsActive, item.Role, item.DefaultPropertyId, null);
         _showForm = true;
     }
 

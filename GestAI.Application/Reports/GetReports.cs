@@ -8,6 +8,17 @@ namespace GestAI.Application.Reports;
 
 public sealed record GetReportsQuery(int PropertyId, DateOnly From, DateOnly ToExclusive) : IRequest<AppResult<ReportsDto>>;
 
+public sealed class GetReportsQueryValidator : FluentValidation.AbstractValidator<GetReportsQuery>
+{
+    public GetReportsQueryValidator()
+    {
+        RuleFor(x => x.PropertyId).GreaterThan(0);
+        RuleFor(x => x.ToExclusive)
+            .Must((query, toExclusive) => toExclusive > query.From)
+            .WithMessage("El rango de fechas no es válido.");
+    }
+}
+
 public sealed class GetReportsQueryHandler : IRequestHandler<GetReportsQuery, AppResult<ReportsDto>>
 {
     private readonly IAppDbContext _db;

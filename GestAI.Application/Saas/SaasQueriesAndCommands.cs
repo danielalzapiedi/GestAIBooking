@@ -214,6 +214,14 @@ public sealed class UpdateAccountCommandHandler : IRequestHandler<UpdateAccountC
             if (currentPlan is null) return AppResult.Fail("plan_required", "La cuenta no tiene plan activo.");
             if (currentPlan.PlanDefinitionId != request.PlanDefinitionId.Value)
             {
+                var selectedPlan = await _db.SaasPlanDefinitions.AsNoTracking()
+                    .Where(x => x.Id == request.PlanDefinitionId.Value)
+                    .Select(x => new { x.Id, x.Name })
+                    .FirstOrDefaultAsync(ct);
+
+                if (selectedPlan is null)
+                    return AppResult.Fail("plan_not_found", "El plan seleccionado no existe.");
+
                 currentPlan.IsActive = false;
                 currentPlan.ChangedAtUtc = DateTime.UtcNow;
                 _db.AccountSubscriptionPlans.Add(new AccountSubscriptionPlan
@@ -224,11 +232,7 @@ public sealed class UpdateAccountCommandHandler : IRequestHandler<UpdateAccountC
                     StartedAtUtc = DateTime.UtcNow,
                     ChangedAtUtc = DateTime.UtcNow
                 });
-                var planName = await _db.SaasPlanDefinitions.Where(x => x.Id == request.PlanDefinitionId.Value).Select(x => x.Name).FirstOrDefaultAsync(ct);
-                if (string.IsNullOrWhiteSpace(planName))
-                    return AppResult.Fail("plan_not_found", "El plan seleccionado no existe.");
-
-                auditMessages.Add($"Plan cambiado a {planName}");
+                auditMessages.Add($"Plan cambiado a {selectedPlan.Name}");
             }
         }
 
@@ -279,6 +283,8 @@ public sealed class GetAccountUsersQueryHandler : IRequestHandler<GetAccountUser
 
         var items = rawItems.Select(x => new AccountUserListItemDto(
             x.UserId,
+            x.Nombre,
+            x.Apellido,
             (x.Nombre + " " + x.Apellido).Trim(),
             x.Email,
             x.IsActive,
@@ -328,6 +334,8 @@ public sealed class UpsertAccountUserCommandHandler : IRequestHandler<UpsertAcco
         if (!await _access.HasModuleAccessAsync(accountId.Value, SaasModule.Users, ct))
             return AppResult<string>.Fail("forbidden", "No tenés permisos para administrar usuarios.");
 
+        var normalizedEmail = request.Email.Trim();
+
         if (request.DefaultPropertyId.HasValue)
         {
             var propertyValid = await _db.Properties.AsNoTracking().AnyAsync(x => x.Id == request.DefaultPropertyId.Value && x.AccountId == accountId.Value, ct);
@@ -339,11 +347,11 @@ public sealed class UpsertAccountUserCommandHandler : IRequestHandler<UpsertAcco
             var limit = await _plan.ValidateUserCreationAsync(accountId.Value, ct);
             if (!limit.Success) return AppResult<string>.Fail(limit.ErrorCode!, limit.Message!);
 
-            var existing = await _identity.FindUserIdByEmailAsync(request.Email.Trim(), ct);
+            var existing = await _identity.FindUserIdByEmailAsync(normalizedEmail, ct);
             if (!string.IsNullOrWhiteSpace(existing.UserId))
                 return AppResult<string>.Fail("email_exists", "Ya existe un usuario con ese email.");
 
-            var create = await _identity.CreateUserIfNotExistsAsync(request.Email.Trim(), request.Password!, ct, request.Nombre.Trim(), request.Apellido.Trim(), request.IsActive, request.DefaultPropertyId, accountId.Value);
+            var create = await _identity.CreateUserIfNotExistsAsync(normalizedEmail, request.Password!, ct, request.Nombre.Trim(), request.Apellido.Trim(), request.IsActive, request.DefaultPropertyId, accountId.Value);
             if (!create.Success || string.IsNullOrWhiteSpace(create.UserId)) return AppResult<string>.Fail("create_user_failed", create.Error ?? "No se pudo crear el usuario.");
 
             _db.AccountUsers.Add(new AccountUser
@@ -367,6 +375,10 @@ public sealed class UpsertAccountUserCommandHandler : IRequestHandler<UpsertAcco
         var membership = await _db.AccountUsers.Include(x => x.User).FirstOrDefaultAsync(x => x.AccountId == accountId.Value && x.UserId == request.UserId, ct);
         if (membership is null) return AppResult<string>.Fail("not_found", "Usuario no encontrado.");
 
+        var existingUser = await _identity.FindUserIdByEmailAsync(normalizedEmail, ct);
+        if (!string.IsNullOrWhiteSpace(existingUser.UserId) && !string.Equals(existingUser.UserId, membership.UserId, StringComparison.Ordinal))
+            return AppResult<string>.Fail("email_exists", "Ya existe un usuario con ese email.");
+
         membership.Role = request.Role;
         membership.IsActive = request.IsActive;
         membership.CanManagePayments = request.Role is InternalUserRole.Admin or InternalUserRole.Owner or InternalUserRole.Reception;
@@ -374,10 +386,10 @@ public sealed class UpsertAccountUserCommandHandler : IRequestHandler<UpsertAcco
         membership.CanManageConfiguration = request.Role is InternalUserRole.Admin or InternalUserRole.Owner;
         membership.User.Nombre = request.Nombre.Trim();
         membership.User.Apellido = request.Apellido.Trim();
-        membership.User.Email = request.Email.Trim();
-        membership.User.UserName = request.Email.Trim();
-        membership.User.NormalizedEmail = request.Email.Trim().ToUpperInvariant();
-        membership.User.NormalizedUserName = request.Email.Trim().ToUpperInvariant();
+        membership.User.Email = normalizedEmail;
+        membership.User.UserName = normalizedEmail;
+        membership.User.NormalizedEmail = normalizedEmail.ToUpperInvariant();
+        membership.User.NormalizedUserName = normalizedEmail.ToUpperInvariant();
         membership.User.IsActive = request.IsActive;
         membership.User.DefaultPropertyId = request.DefaultPropertyId;
 
