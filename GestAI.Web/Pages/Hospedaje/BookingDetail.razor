@@ -1,4 +1,5 @@
 @page "/bookings/{PropertyId:int}/{BookingId:int}"
+@using GestAI.Web.Helpers
 @inject ApiClient Api
 @inject IJSRuntime JS
 @inject NavigationManager Nav
@@ -337,7 +338,7 @@ else
         _loaded = false;
         _error = null;
         var settings = await FeatureState.EnsureAsync(PropertyId);
-        _paymentsEnabled = settings?.EnablePayments ?? true;
+        _paymentsEnabled = (settings?.EnablePayments ?? true) && PropertyFeatureModulePolicy.IsAvailable(settings, nameof(PropertyFeatureSettingsDto.EnablePayments));
         _booking = (await Api.GetAsync<AppResult<BookingDetailDto>>($"api/properties/{PropertyId}/bookings/{BookingId}"))?.Data;
         _payments = _paymentsEnabled
             ? (await Api.GetAsync<AppResult<List<PaymentDto>>>($"api/properties/{PropertyId}/bookings/{BookingId}/payments"))?.Data ?? new()

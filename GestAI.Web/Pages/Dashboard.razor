@@ -1,10 +1,22 @@
 @page "/dashboard/{PropertyId:int}"
 @using GestAI.Web.Dtos
+@using GestAI.Web.Helpers
 @inject ApiClient Api
 @inject GestAI.Web.Service.PropertyFeatureState FeatureState
 
 <PageTitle>Dashboard</PageTitle>
 
+@if (!_featureChecked)
+{
+    <EmptyState Title="Cargando dashboard" Description="Estamos validando la configuración y preparando el resumen operativo del hospedaje." Icon="bi-speedometer2" />
+}
+else if (_dashboardForbidden)
+{
+    <ModuleUnavailableState PropertyId="@PropertyId"
+                            ModuleName="Dashboard" />
+}
+else
+{
 <div class="pagetitle d-flex justify-content-between align-items-center flex-wrap gap-2">
     <div>
         <h1>Dashboard</h1>
@@ -13,9 +25,17 @@
     <button class="btn btn-outline-primary" @onclick="LoadAsync"><i class="bi bi-arrow-repeat"></i> Actualizar</button>
 </div>
 
-@if (_data is null)
+@if (!_loaded)
 {
     <EmptyState Title="Cargando dashboard" Description="Estamos trayendo indicadores, reservas próximas y alertas operativas." Icon="bi-speedometer2" />
+}
+else if (_data is null)
+{
+    <EmptyState Title="No se pudo cargar el dashboard"
+                Description="@(_loadError ?? "Reintentá en unos segundos para volver a consultar los indicadores del hospedaje.")"
+                Icon="bi-exclamation-triangle">
+        <button class="btn btn-outline-primary" @onclick="LoadAsync">Reintentar</button>
+    </EmptyState>
 }
 else
 {
@@ -226,9 +246,14 @@ else
     </div>
     }
 }
+}
 
 @code {
     [Parameter] public int PropertyId { get; set; }
+    private bool _featureChecked;
+    private bool _dashboardForbidden;
+    private bool _loaded;
+    private string? _loadError;
     private DashboardSummaryDto? _data;
     private bool _paymentsEnabled = true;
     private bool _agendaEnabled = true;
@@ -240,13 +265,29 @@ else
     protected override async Task OnParametersSetAsync()
     {
         var settings = await FeatureState.EnsureAsync(PropertyId);
-        _paymentsEnabled = settings?.EnablePayments ?? true;
+        _featureChecked = true;
+        _paymentsEnabled = (settings?.EnablePayments ?? true) && PropertyFeatureModulePolicy.IsAvailable(settings, nameof(PropertyFeatureSettingsDto.EnablePayments));
         _agendaEnabled = settings?.EnableAgenda ?? true;
-        _reportsEnabled = settings?.EnableReports ?? true;
+        _reportsEnabled = (settings?.EnableReports ?? true) && PropertyFeatureModulePolicy.IsAvailable(settings, nameof(PropertyFeatureSettingsDto.EnableReports));
         await LoadAsync();
     }
 
-    private async Task LoadAsync() => _data = (await Api.GetAsync<AppResult<DashboardSummaryDto>>($"api/properties/{PropertyId}/dashboard"))?.Data;
+    private async Task LoadAsync()
+    {
+        _loaded = false;
+        _loadError = null;
+        _dashboardForbidden = false;
+
+        var response = await Api.GetAsync<AppResult<DashboardSummaryDto>>($"api/properties/{PropertyId}/dashboard");
+        _data = response?.Success == true ? response.Data : null;
+        if (response?.Success == false)
+        {
+            _dashboardForbidden = response.ErrorCode == "forbidden";
+            _loadError = response.Message;
+        }
+
+        _loaded = true;
+    }
 
     private static string FormatMoney(decimal value) => value.ToString("0.00");
     private static string FormatPercent(decimal value) => $"{value:0.##}%";
