@@ -40,6 +40,12 @@ else
     }
     else
     {
+        <div class="summary-pill-grid mb-3">
+            <div class="summary-pill"><div class="label">Plantillas</div><div class="value">@_templates.Count</div></div>
+            <div class="summary-pill"><div class="label">Activas</div><div class="value">@_templates.Count(x => x.IsActive)</div></div>
+            <div class="summary-pill"><div class="label">Tipos</div><div class="value">@_templates.Select(x => x.Type).Distinct().Count()</div></div>
+        </div>
+
         <div class="row g-3">
             @foreach (var t in _templates.OrderBy(x => x.Type).ThenBy(x => x.Name))
             {
@@ -49,7 +55,7 @@ else
                             <div class="d-flex justify-content-between align-items-start gap-2">
                                 <div>
                                     <h5 class="card-title mb-1">@t.Name</h5>
-                                    <div class="small text-muted">@t.Type</div>
+                                    <div class="small text-muted">@TemplateTypeLabel(t.Type)</div>
                                 </div>
                                 <StatusBadge Text="@(t.IsActive ? "Activa" : "Inactiva")" CssClass="@(t.IsActive ? "ui-badge ui-badge-success" : "ui-badge ui-badge-neutral")" />
                             </div>
@@ -86,7 +92,7 @@ else
                             <select class="form-select" @bind="_form.Type">
                                 @foreach (var type in Enum.GetValues<TemplateType>())
                                 {
-                                    <option value="@type">@type</option>
+                                    <option value="@type">@TemplateTypeLabel(type)</option>
                                 }
                             </select>
                         </div>
@@ -99,11 +105,12 @@ else
                         </div>
                         <div class="col-12">
                             <label class="form-label">Nombre</label>
-                            <input class="form-control" @bind="_form.Name" />
+                            <input class="form-control" @bind="_form.Name" placeholder="Ej. Confirmación estándar" />
                         </div>
                         <div class="col-12">
                             <label class="form-label">Contenido</label>
                             <textarea class="form-control" rows="8" @bind="_form.Body"></textarea>
+                            <div class="form-text">Tipo seleccionado: @TemplateTypeLabel(_form.Type).</div>
                         </div>
                     </div>
                 </div>
@@ -223,4 +230,13 @@ else
         public string Body { get; set; } = string.Empty;
         public bool IsActive { get; set; } = true;
     }
+
+    private static string TemplateTypeLabel(TemplateType type) => type switch
+    {
+        TemplateType.Inquiry => "Consulta",
+        TemplateType.Confirmation => "Confirmación",
+        TemplateType.PreCheckIn => "Pre check-in",
+        TemplateType.PostCheckOut => "Post check-out",
+        _ => type.ToString()
+    };
 }

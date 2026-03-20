@@ -26,59 +26,90 @@ else
     }
 
     <EditForm Model="this" OnValidSubmit="Save">
-        <div class="card mb-3"><div class="card-body pt-3"><div class="row g-3">
-            <div class="col-md-5"><label class="form-label">Nombre</label><input class="form-control" @bind="Name" /></div>
-            <div class="col-md-3"><label class="form-label">Unidad</label><select class="form-select" @bind="UnitId">@foreach (var u in _units.Where(x => x.IsActive)){<option value="@u.Id">@u.Name</option>}</select></div>
-            <div class="col-md-2"><label class="form-label">Base</label><input class="form-control" type="number" step="0.01" @bind="BaseNightlyRate" /></div>
-            <div class="col-md-2"><label class="form-label">Activa</label><select class="form-select" @bind="IsActive"><option value="true">Sí</option><option value="false">No</option></select></div>
-            <div class="col-md-3"><label class="form-label">Ajuste fin de semana</label><select class="form-select" @bind="WeekendAdjustmentEnabled"><option value="false">No</option><option value="true">Sí</option></select></div>
-            <div class="col-md-3"><label class="form-label">Tipo ajuste</label><select class="form-select" @bind="WeekendAdjustmentType">@foreach (var t in Enum.GetValues<RateAdjustmentType>()){<option value="@t">@t</option>}</select></div>
-            <div class="col-md-3"><label class="form-label">Valor ajuste</label><input class="form-control" type="number" step="0.01" @bind="WeekendAdjustmentValue" /></div>
-        </div></div></div>
+        <div class="row g-3">
+            <div class="col-12 col-xl-8">
+                <div class="card mb-3"><div class="card-body pt-3"><div class="row g-3">
+                    <div class="col-12">
+                        <h5 class="card-title mb-1">Configuración general</h5>
+                        <div class="small text-muted">Definí la tarifa base y el comportamiento de ajuste para esta unidad.</div>
+                    </div>
+                    <div class="col-md-5"><label class="form-label">Nombre</label><input class="form-control" @bind="Name" placeholder="Ej. Tarifa flexible" /></div>
+                    <div class="col-md-3"><label class="form-label">Unidad</label><select class="form-select" @bind="UnitId">@foreach (var u in _units.Where(x => x.IsActive)){<option value="@u.Id">@u.Name</option>}</select></div>
+                    <div class="col-md-2"><label class="form-label">Tarifa base</label><input class="form-control" type="number" min="0" step="0.01" @bind="BaseNightlyRate" /></div>
+                    <div class="col-md-2"><label class="form-label">Activa</label><select class="form-select" @bind="IsActive"><option value="true">Sí</option><option value="false">No</option></select></div>
+                    <div class="col-md-3"><label class="form-label">Ajuste fin de semana</label><select class="form-select" @bind="WeekendAdjustmentEnabled"><option value="false">No</option><option value="true">Sí</option></select></div>
+                    <div class="col-md-3"><label class="form-label">Tipo de ajuste</label><select class="form-select" @bind="WeekendAdjustmentType">@foreach (var t in Enum.GetValues<RateAdjustmentType>()){<option value="@t">@RateAdjustmentTypeLabel(t)</option>}</select></div>
+                    <div class="col-md-3"><label class="form-label">Valor del ajuste</label><input class="form-control" type="number" step="0.01" @bind="WeekendAdjustmentValue" /></div>
+                    <div class="col-12"><div class="small text-muted">Vista previa: <strong>@WeekendAdjustmentSummary</strong></div></div>
+                </div></div></div>
 
-        <div class="card mb-3"><div class="card-body pt-3">
-            <div class="d-flex justify-content-between align-items-center mb-2"><h5 class="card-title mb-0">Temporadas</h5><button type="button" class="btn btn-sm btn-outline-primary" @onclick="AddSeason">Agregar</button></div>
-            @if (!SeasonalRates.Any())
-            {<div class="text-muted">Sin temporadas configuradas.</div>}
-            @for (var i = 0; i < SeasonalRates.Count; i++)
-            {
-                var item = SeasonalRates[i];
-                <div class="row g-2 border rounded p-2 mb-2">
-                    <div class="col-md-3"><input class="form-control" placeholder="Nombre" @bind="item.Name" /></div>
-                    <div class="col-md-1"><input class="form-control" type="number" placeholder="Mes ini" @bind="item.StartMonth" /></div>
-                    <div class="col-md-1"><input class="form-control" type="number" placeholder="Día ini" @bind="item.StartDay" /></div>
-                    <div class="col-md-1"><input class="form-control" type="number" placeholder="Mes fin" @bind="item.EndMonth" /></div>
-                    <div class="col-md-1"><input class="form-control" type="number" placeholder="Día fin" @bind="item.EndDay" /></div>
-                    <div class="col-md-2"><select class="form-select" @bind="item.AdjustmentType">@foreach (var t in Enum.GetValues<RateAdjustmentType>()){<option value="@t">@t</option>}</select></div>
-                    <div class="col-md-2"><input class="form-control" type="number" step="0.01" @bind="item.AdjustmentValue" /></div>
-                    <div class="col-md-1"><select class="form-select" @bind="item.IsActive"><option value="true">Sí</option><option value="false">No</option></select></div>
-                    <div class="col-md-1"><button type="button" class="btn btn-sm btn-outline-danger w-100" @onclick="() => RemoveSeason(i)">X</button></div>
+                <div class="card mb-3"><div class="card-body pt-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2"><h5 class="card-title mb-0">Temporadas</h5><button type="button" class="btn btn-sm btn-outline-primary" @onclick="AddSeason">Agregar</button></div>
+                    @if (!SeasonalRates.Any())
+                    {<div class="text-muted">Sin temporadas configuradas.</div>}
+                    @for (var i = 0; i < SeasonalRates.Count; i++)
+                    {
+                        var item = SeasonalRates[i];
+                        <div class="row g-2 border rounded p-2 mb-2">
+                            <div class="col-md-3"><input class="form-control" placeholder="Nombre" @bind="item.Name" /></div>
+                            <div class="col-md-1"><input class="form-control" type="number" min="1" max="12" placeholder="Mes ini" @bind="item.StartMonth" /></div>
+                            <div class="col-md-1"><input class="form-control" type="number" min="1" max="31" placeholder="Día ini" @bind="item.StartDay" /></div>
+                            <div class="col-md-1"><input class="form-control" type="number" min="1" max="12" placeholder="Mes fin" @bind="item.EndMonth" /></div>
+                            <div class="col-md-1"><input class="form-control" type="number" min="1" max="31" placeholder="Día fin" @bind="item.EndDay" /></div>
+                            <div class="col-md-2"><select class="form-select" @bind="item.AdjustmentType">@foreach (var t in Enum.GetValues<RateAdjustmentType>()){<option value="@t">@RateAdjustmentTypeLabel(t)</option>}</select></div>
+                            <div class="col-md-2"><input class="form-control" type="number" step="0.01" @bind="item.AdjustmentValue" /></div>
+                            <div class="col-md-1"><select class="form-select" @bind="item.IsActive"><option value="true">Sí</option><option value="false">No</option></select></div>
+                            <div class="col-md-1"><button type="button" class="btn btn-sm btn-outline-danger w-100" @onclick="() => RemoveSeason(i)">X</button></div>
+                        </div>
+                    }
+                </div></div>
+
+                <div class="card mb-3"><div class="card-body pt-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2"><h5 class="card-title mb-0">Rangos específicos</h5><button type="button" class="btn btn-sm btn-outline-primary" @onclick="AddRange">Agregar</button></div>
+                    @if (!DateRangeRates.Any())
+                    {<div class="text-muted">Sin rangos configurados.</div>}
+                    @for (var i = 0; i < DateRangeRates.Count; i++)
+                    {
+                        var item = DateRangeRates[i];
+                        <div class="row g-2 border rounded p-2 mb-2">
+                            <div class="col-md-3"><input class="form-control" placeholder="Nombre" @bind="item.Name" /></div>
+                            <div class="col-md-2"><input class="form-control" type="date" @bind="item.DateFrom" /></div>
+                            <div class="col-md-2"><input class="form-control" type="date" @bind="item.DateTo" /></div>
+                            <div class="col-md-2"><select class="form-select" @bind="item.AdjustmentType">@foreach (var t in Enum.GetValues<RateAdjustmentType>()){<option value="@t">@RateAdjustmentTypeLabel(t)</option>}</select></div>
+                            <div class="col-md-2"><input class="form-control" type="number" step="0.01" @bind="item.AdjustmentValue" /></div>
+                            <div class="col-md-1"><select class="form-select" @bind="item.IsActive"><option value="true">Sí</option><option value="false">No</option></select></div>
+                            <div class="col-md-12 text-end"><button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveRange(i)">Eliminar</button></div>
+                        </div>
+                    }
+                </div></div>
+
+                <div class="d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-outline-secondary" @onclick='() => Nav.NavigateTo($"/rates/{PropertyId}")'>Cancelar</button>
+                    <button type="submit" class="btn btn-primary" disabled="@_saving">@(_saving ? "Guardando..." : "Guardar")</button>
                 </div>
-            }
-        </div></div>
+            </div>
 
-        <div class="card mb-3"><div class="card-body pt-3">
-            <div class="d-flex justify-content-between align-items-center mb-2"><h5 class="card-title mb-0">Rangos específicos</h5><button type="button" class="btn btn-sm btn-outline-primary" @onclick="AddRange">Agregar</button></div>
-            @if (!DateRangeRates.Any())
-            {<div class="text-muted">Sin rangos configurados.</div>}
-            @for (var i = 0; i < DateRangeRates.Count; i++)
-            {
-                var item = DateRangeRates[i];
-                <div class="row g-2 border rounded p-2 mb-2">
-                    <div class="col-md-3"><input class="form-control" placeholder="Nombre" @bind="item.Name" /></div>
-                    <div class="col-md-2"><input class="form-control" type="date" @bind="item.DateFrom" /></div>
-                    <div class="col-md-2"><input class="form-control" type="date" @bind="item.DateTo" /></div>
-                    <div class="col-md-2"><select class="form-select" @bind="item.AdjustmentType">@foreach (var t in Enum.GetValues<RateAdjustmentType>()){<option value="@t">@t</option>}</select></div>
-                    <div class="col-md-2"><input class="form-control" type="number" step="0.01" @bind="item.AdjustmentValue" /></div>
-                    <div class="col-md-1"><select class="form-select" @bind="item.IsActive"><option value="true">Sí</option><option value="false">No</option></select></div>
-                    <div class="col-md-12 text-end"><button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveRange(i)">Eliminar</button></div>
+            <div class="col-12 col-xl-4">
+                <div class="card">
+                    <div class="card-body pt-3">
+                        <h5 class="card-title mb-3">Resumen rápido</h5>
+                        <div class="summary-pill-grid">
+                            <div class="summary-pill"><div class="label">Base</div><div class="value">@BaseNightlyRate.ToString("0.00")</div></div>
+                            <div class="summary-pill"><div class="label">Temporadas</div><div class="value">@SeasonalRates.Count</div></div>
+                            <div class="summary-pill"><div class="label">Rangos</div><div class="value">@DateRangeRates.Count</div></div>
+                        </div>
+                        <div class="mt-4 small text-muted">
+                            <div class="fw-semibold text-dark mb-2">Chequeos sugeridos</div>
+                            <ul class="mb-0 ps-3">
+                                <li>La tarifa está @ActiveLabel(IsActive).</li>
+                                <li>@WeekendAdjustmentSummary.</li>
+                                <li>@SeasonalRates.Count(x => x.IsActive) temporada(s) activa(s).</li>
+                                <li>@DateRangeRates.Count(x => x.IsActive) rango(s) activo(s).</li>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
-            }
-        </div></div>
-
-        <div class="d-flex justify-content-end gap-2">
-            <button type="button" class="btn btn-outline-secondary" @onclick='() => Nav.NavigateTo($"/rates/{PropertyId}")'>Cancelar</button>
-            <button type="submit" class="btn btn-primary" disabled="@_saving">@(_saving ? "Guardando..." : "Guardar")</button>
+            </div>
         </div>
     </EditForm>
 }
@@ -92,6 +123,9 @@ else
     private bool _success;
     private string? _message;
     private List<UnitListItemDto> _units = new();
+    private string WeekendAdjustmentSummary => WeekendAdjustmentEnabled
+        ? $"{RateAdjustmentTypeLabel(WeekendAdjustmentType)} de {WeekendAdjustmentValue:0.##} aplicada en fines de semana"
+        : "Sin ajuste especial para fines de semana";
 
     public int UnitId { get; set; }
     public string Name { get; set; } = string.Empty;
@@ -146,6 +180,58 @@ else
 
     private async Task Save()
     {
+        _message = null;
+        _success = false;
+        Name = Name.Trim();
+
+        if (string.IsNullOrWhiteSpace(Name))
+        {
+            _message = "Indicá un nombre para la tarifa.";
+            return;
+        }
+
+        if (UnitId <= 0)
+        {
+            _message = "Seleccioná una unidad para la tarifa.";
+            return;
+        }
+
+        if (BaseNightlyRate < 0)
+        {
+            _message = "La tarifa base no puede ser negativa.";
+            return;
+        }
+
+        if (WeekendAdjustmentEnabled && WeekendAdjustmentValue == 0)
+        {
+            _message = "Indicá un valor distinto de cero para el ajuste de fin de semana.";
+            return;
+        }
+
+        if (SeasonalRates.Any(x => string.IsNullOrWhiteSpace(x.Name)))
+        {
+            _message = "Todas las temporadas deben tener nombre.";
+            return;
+        }
+
+        if (SeasonalRates.Any(x => x.StartMonth is < 1 or > 12 || x.EndMonth is < 1 or > 12 || x.StartDay is < 1 or > 31 || x.EndDay is < 1 or > 31))
+        {
+            _message = "Revisá meses y días de las temporadas: deben estar dentro de rangos válidos.";
+            return;
+        }
+
+        if (DateRangeRates.Any(x => string.IsNullOrWhiteSpace(x.Name)))
+        {
+            _message = "Todos los rangos específicos deben tener nombre.";
+            return;
+        }
+
+        if (DateRangeRates.Any(x => x.DateTo < x.DateFrom))
+        {
+            _message = "En los rangos específicos, la fecha hasta no puede ser anterior a la fecha desde.";
+            return;
+        }
+
         _saving = true;
         var cmd = new UpsertRatePlanCommand(PropertyId, RatePlanId, UnitId, Name, BaseNightlyRate, WeekendAdjustmentEnabled, WeekendAdjustmentType, WeekendAdjustmentValue, IsActive,
             SeasonalRates.Select(x => new SeasonalRateInputDto(x.Name, x.StartMonth, x.StartDay, x.EndMonth, x.EndDay, x.AdjustmentType, x.AdjustmentValue, x.IsActive)).ToList(),
@@ -166,6 +252,15 @@ else
             _saving = false;
         }
     }
+
+    private static string RateAdjustmentTypeLabel(RateAdjustmentType type) => type switch
+    {
+        RateAdjustmentType.Fixed => "Monto fijo",
+        RateAdjustmentType.Percentage => "Porcentaje",
+        _ => type.ToString()
+    };
+
+    private static string ActiveLabel(bool isActive) => isActive ? "activa" : "inactiva";
 
     public sealed class SeasonRow
     {
