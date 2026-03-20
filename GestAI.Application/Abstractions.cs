@@ -82,6 +82,7 @@ public interface IIdentityService
     Task<(bool Success, string? UserId, string? Error)> CreateUserIfNotExistsAsync(string email, string password, CancellationToken ct);
     Task<(bool Success, string? UserId, string? Error)> CreateUserIfNotExistsAsync(string email, string password, CancellationToken ct, string firstName, string lastName, bool isActive, int? defaultPropertyId, int defaultAccountId);
     Task<(bool Success, string? UserId, string? Error)> FindUserIdByEmailAsync(string email, CancellationToken ct);
+    Task<(bool Success, string? Error)> ResetPasswordAsync(string userId, string newPassword, CancellationToken ct);
 }
 
 public interface IAccountResolver

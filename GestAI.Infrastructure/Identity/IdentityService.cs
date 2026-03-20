@@ -45,4 +45,18 @@ public class IdentityService : IIdentityService
 
         return (true, user.Id, null);
     }
+
+    public async Task<(bool Success, string? Error)> ResetPasswordAsync(string userId, string newPassword, CancellationToken ct)
+    {
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user is null)
+            return (false, "Usuario no encontrado.");
+
+        var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+        var result = await _userManager.ResetPasswordAsync(user, token, newPassword);
+
+        return result.Succeeded
+            ? (true, null)
+            : (false, string.Join(" | ", result.Errors.Select(e => e.Description)));
+    }
 }

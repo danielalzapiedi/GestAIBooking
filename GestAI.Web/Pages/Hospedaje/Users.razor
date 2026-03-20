@@ -17,6 +17,10 @@
 
 <div class="card mb-3">
     <div class="card-body pt-3">
+        @if (!string.IsNullOrWhiteSpace(_pageError))
+        {
+            <div class="alert alert-danger">@_pageError</div>
+        }
         @if (!_loaded)
         {
             <p>Cargando usuarios...</p>
@@ -69,6 +73,10 @@
     <div class="card">
         <div class="card-body pt-3">
             <h5 class="card-title">@(_form.UserId is null ? "Nuevo usuario" : "Editar usuario")</h5>
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <div class="alert alert-danger">@_error</div>
+            }
             <div class="row g-3">
                 <div class="col-md-6"><label class="form-label">Nombre</label><input class="form-control" @bind="_form.Nombre" /></div>
                 <div class="col-md-6"><label class="form-label">Apellido</label><input class="form-control" @bind="_form.Apellido" /></div>
@@ -76,18 +84,28 @@
                 <div class="col-md-3"><label class="form-label">Rol</label><select class="form-select" @bind="_form.Role">@foreach (var role in Enum.GetValues<InternalUserRole>()){<option value="@role">@role</option>}</select></div>
                 <div class="col-md-3"><label class="form-label">Activo</label><select class="form-select" @bind="_form.IsActive"><option value="true">Sí</option><option value="false">No</option></select></div>
                 <div class="col-md-6"><label class="form-label">Hospedaje por defecto</label><select class="form-select" @bind="_form.DefaultPropertyId"><option value="">Sin definir</option>@foreach(var p in _properties){<option value="@p.Id">@p.Name</option>}</select></div>
-                @if (_form.UserId is null)
-                {
-                    <div class="col-md-6">
-                        <label class="form-label">Password temporal</label>
-                        <input class="form-control" @bind="_form.Password" />
-                        <div class="form-text">Se genera una clave temporal editable para evitar usar una contraseña fija repetida.</div>
+                <div class="col-md-6">
+                    <label class="form-label">@(_form.UserId is null ? "Password temporal" : "Nueva contraseña temporal")</label>
+                    <div class="input-group">
+                        <input class="form-control" type="@(_showPassword ? "text" : "password")" autocomplete="new-password" @bind="_form.Password" />
+                        <button type="button" class="btn btn-outline-secondary" @onclick="TogglePasswordVisibility">@(_showPassword ? "Ocultar" : "Ver")</button>
+                        <button type="button" class="btn btn-outline-secondary" @onclick="GeneratePasswordForForm">Generar</button>
                     </div>
-                }
+                    <div class="form-text">
+                        @if (_form.UserId is null)
+                        {
+                            <span>Se crea con una clave temporal editable para evitar usar una contraseña fija repetida.</span>
+                        }
+                        else
+                        {
+                            <span>Opcional. Si completás este campo, la contraseña actual del usuario se reemplaza por una nueva temporal.</span>
+                        }
+                    </div>
+                </div>
             </div>
             <div class="mt-3 d-flex gap-2">
-                <button class="btn btn-primary" @onclick="Save">Guardar</button>
-                <button class="btn btn-outline-secondary" @onclick="Cancel">Cancelar</button>
+                <button class="btn btn-primary" disabled="@_saving" @onclick="Save">Guardar</button>
+                <button class="btn btn-outline-secondary" disabled="@_saving" @onclick="Cancel">Cancelar</button>
             </div>
         </div>
     </div>
@@ -96,6 +114,10 @@
 @code {
     private bool _loaded;
     private bool _showForm;
+    private bool _showPassword;
+    private bool _saving;
+    private string? _error;
+    private string? _pageError;
     private List<AccountUserListItemDto> _items = new();
     private List<PropertyListItemDto> _properties = new();
     private UpsertAccountUserCommand _form = new(null, "", "", "", true, InternalUserRole.Reception, null, GenerateTemporaryPassword());
@@ -107,45 +129,88 @@
 
     private async Task LoadAsync()
     {
+        _pageError = null;
+
         var users = await Api.GetAsync<AppResult<List<AccountUserListItemDto>>>("api/saas/users");
-        _items = users?.Data ?? new();
         var props = await Api.GetAsync<AppResult<List<PropertyListItemDto>>>("api/properties/mine");
-        _properties = props?.Data ?? new();
+
+        if (users?.Success != true || props?.Success != true)
+        {
+            _items = new();
+            _properties = new();
+            _pageError = users?.Message ?? props?.Message ?? "No se pudo cargar la información de usuarios.";
+            _loaded = true;
+            return;
+        }
+
+        _items = users.Data ?? new();
+        _properties = props.Data ?? new();
         _loaded = true;
     }
 
     private void NewUser()
     {
+        _error = null;
+        _showPassword = false;
         _form = new UpsertAccountUserCommand(null, "", "", "", true, InternalUserRole.Reception, null, GenerateTemporaryPassword());
         _showForm = true;
     }
 
     private void Edit(AccountUserListItemDto item)
     {
-        var names = item.DisplayName.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
-        _form = new UpsertAccountUserCommand(item.UserId, names.FirstOrDefault() ?? item.DisplayName, names.Skip(1).FirstOrDefault() ?? "", item.Email, item.IsActive, item.Role, item.DefaultPropertyId, null);
+        _error = null;
+        _showPassword = false;
+        _form = new UpsertAccountUserCommand(item.UserId, item.Nombre, item.Apellido, item.Email, item.IsActive, item.Role, item.DefaultPropertyId, null);
         _showForm = true;
     }
 
     private async Task Save()
     {
+        _error = null;
+        _saving = true;
+
+        AppResult? response;
         if (_form.UserId is null)
-            await Api.PostAsync("api/saas/users", _form);
+            response = await Api.PostJsonAsync<AppResult, UpsertAccountUserCommand>("api/saas/users", _form);
         else
-            await Api.PutAsync($"api/saas/users/{_form.UserId}", _form);
+            response = await Api.PutAsync<UpsertAccountUserCommand, AppResult>($"api/saas/users/{_form.UserId}", _form);
+
+        if (response?.Success != true)
+        {
+            _error = response?.Message ?? "No se pudo guardar el usuario.";
+            _saving = false;
+            return;
+        }
 
         _showForm = false;
         await LoadAsync();
-        Api.Toast("Usuario guardado correctamente.");
+        Api.Toast(string.IsNullOrWhiteSpace(_form.Password) ? "Usuario guardado correctamente." : "Usuario guardado y contraseña temporal actualizada.");
+        _saving = false;
     }
 
     private async Task Toggle(AccountUserListItemDto item)
     {
-        await Api.PostAsync($"api/saas/users/{item.UserId}/status", new { isActive = !item.IsActive });
+        _pageError = null;
+        var response = await Api.PostJsonAsync<AppResult, object>($"api/saas/users/{item.UserId}/status", new { isActive = !item.IsActive });
+        if (response?.Success != true)
+        {
+            _pageError = response?.Message ?? "No se pudo actualizar el estado del usuario.";
+            return;
+        }
+
         await LoadAsync();
     }
 
-    private void Cancel() => _showForm = false;
+    private void Cancel()
+    {
+        _showForm = false;
+        _showPassword = false;
+        _error = null;
+    }
+
+    private void TogglePasswordVisibility() => _showPassword = !_showPassword;
+
+    private void GeneratePasswordForForm() => _form.Password = GenerateTemporaryPassword();
 
     private static string GenerateTemporaryPassword()
         => $"Tmp{Guid.NewGuid():N}"[..12] + "!";

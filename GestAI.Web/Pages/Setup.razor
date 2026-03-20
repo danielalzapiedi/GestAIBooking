@@ -16,7 +16,7 @@
 }
 else if (_status is null)
 {
-    <EmptyState Title="No pudimos obtener el estado inicial" Description="Reintentá en unos segundos para continuar con la configuración." Icon="bi-exclamation-triangle">
+    <EmptyState Title="No pudimos obtener el estado inicial" Description="@(_error ?? "Reintentá en unos segundos para continuar con la configuración.")" Icon="bi-exclamation-triangle">
         <button class="btn btn-outline-primary" @onclick="LoadAsync">Reintentar</button>
     </EmptyState>
 }
@@ -81,14 +81,18 @@ else
 @code {
     private bool _loaded;
     private SetupStatusDto? _status;
+    private string? _error;
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
     private async Task LoadAsync()
     {
         _loaded = false;
+        _error = null;
         var response = await Api.GetAsync<AppResult<SetupStatusDto>>("api/setup/status");
         _status = response?.Success == true ? response.Data : null;
+        if (response?.Success == false)
+            _error = response.Message;
         _loaded = true;
     }
 
@@ -96,6 +100,7 @@ else
     {
         null => "Reintentar",
         { HasAnyProperty: false } => "Crear hospedaje",
+        { HasAnyUnit: false, RecommendedPropertyId: not null } => "Crear primera unidad",
         { HasAnyUnit: false } => "Ir a hospedajes",
         { DefaultPropertyId: not null } => "Ir al dashboard",
         _ => "Elegir hospedaje"
@@ -105,6 +110,7 @@ else
     {
         null => "No hay suficiente información para sugerir el siguiente paso.",
         { HasAnyProperty: false } => "Todavía no hay hospedajes cargados. Empezá por crear el primer hospedaje de la cuenta.",
+        { HasAnyUnit: false, RecommendedPropertyId: not null } => "Ya existe un hospedaje de referencia, pero todavía faltan unidades activas. Te llevamos directo a crear la primera para destrabar reservas, tarifas y calendario.",
         { HasAnyUnit: false } => "Ya existe al menos un hospedaje, pero todavía faltan unidades activas para poder operar reservas.",
         { DefaultPropertyId: not null } => "Tu cuenta ya tiene un hospedaje por defecto configurado. Podés volver directo a la operación.",
         _ => "Ya hay datos cargados, pero falta elegir o confirmar un hospedaje de trabajo para seguir operando con claridad."
@@ -121,6 +127,12 @@ else
         if (!_status.HasAnyProperty)
         {
             Nav.NavigateTo("/properties/new");
+            return;
+        }
+
+        if (!_status.HasAnyUnit && _status.RecommendedPropertyId is not null)
+        {
+            Nav.NavigateTo($"/units/{_status.RecommendedPropertyId.Value}/new");
             return;
         }
 

@@ -127,8 +127,7 @@ else
                     new("Mostrar cotizador", "Cotización comercial por estadía.", null, false, () => _settings.EnableQuotes, OnQuotesChanged),
                     new("Permitir cotizaciones guardadas", "Guardar propuestas y convertir a reserva.", _settings.EnableQuotes ? null : "Requiere mantener activo el cotizador.", !_settings.EnableQuotes, () => _settings.EnableSavedQuotes, v => _settings.EnableSavedQuotes = v),
                     new("Aplicar promociones", "Descuentos y reglas comerciales.", GetModuleHelper(nameof(PropertyFeatureSettingsDto.EnablePromotions)), IsModuleGovernedFeatureDisabled(nameof(PropertyFeatureSettingsDto.EnablePromotions)), () => _settings.EnablePromotions, v => _settings.EnablePromotions = v),
-                    new("Usar tarifas avanzadas", "Temporadas y rangos específicos por fecha.", GetModuleHelper(nameof(PropertyFeatureSettingsDto.EnableAdvancedRates)), IsModuleGovernedFeatureDisabled(nameof(PropertyFeatureSettingsDto.EnableAdvancedRates)), () => _settings.EnableAdvancedRates, v => _settings.EnableAdvancedRates = v),
-                    new("Habilitar venta directa", "Flujos públicos de reserva directa.", null, false, () => _settings.EnableDirectBooking, v => _settings.EnableDirectBooking = v)
+                    new("Usar tarifas avanzadas", "Temporadas y rangos específicos por fecha.", GetModuleHelper(nameof(PropertyFeatureSettingsDto.EnableAdvancedRates)), IsModuleGovernedFeatureDisabled(nameof(PropertyFeatureSettingsDto.EnableAdvancedRates)), () => _settings.EnableAdvancedRates, v => _settings.EnableAdvancedRates = v)
                 }),
                 new FeatureGroupVm("Finanzas", "Controles de cobro y seguimiento económico.", new List<FeatureToggleVm>
                 {

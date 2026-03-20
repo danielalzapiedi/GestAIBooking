@@ -1,6 +1,6 @@
 namespace GestAI.Web.Dtos;
 
-public sealed record IncomeReportDto(int Year, int Month, decimal PaidIncome, decimal DepositsCollected, decimal DepositsPending, decimal AverageIncomePerNight);
+public sealed record IncomeReportDto(DateOnly From, DateOnly ToExclusive, decimal PaidIncome, decimal DepositsCollected, decimal DepositsPending, decimal AverageIncomePerNight);
 
 public sealed record OccupancyReportDto(DateOnly From, DateOnly ToExclusive, int TotalNightsAvailable, int NightsOccupied, decimal OccupancyPercent, decimal AverageStayNights);
 

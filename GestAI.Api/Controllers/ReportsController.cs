@@ -15,8 +15,6 @@ public sealed class ReportsController(IMediator mediator) : ControllerBase
         int propertyId,
         [FromQuery] DateOnly from,
         [FromQuery] DateOnly to,
-        [FromQuery] int year,
-        [FromQuery] int month,
         CancellationToken ct)
-        => Ok(await mediator.Send(new GetReportsQuery(propertyId, from, to, year, month), ct));
+        => Ok(await mediator.Send(new GetReportsQuery(propertyId, from, to), ct));
 }
