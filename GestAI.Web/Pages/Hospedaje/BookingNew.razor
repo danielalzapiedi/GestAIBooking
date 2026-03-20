@@ -1,5 +1,6 @@
 @page "/bookings/new/{PropertyId:int}"
 @inject ApiClient Api
+@inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject GestAI.Web.Service.PropertyFeatureState FeatureState
 @using GestAI.Web.Dtos
@@ -343,14 +344,30 @@ else
         {
             if (res?.ErrorCode == "warn_manual_price" && !_confirmManualPriceChange)
             {
-                _confirmManualPriceChange = true;
-                await Save();
+                var confirmed = await JS.InvokeAsync<bool>("confirm", res.Message ?? "Estás modificando el precio manualmente. ¿Querés continuar?");
+                if (confirmed)
+                {
+                    _confirmManualPriceChange = true;
+                    await Save();
+                }
+                else
+                {
+                    _saving = false;
+                }
                 return;
             }
             if (res?.ErrorCode == "warn_reduce_with_payments" && !_confirmReduceStayWithPayments)
             {
-                _confirmReduceStayWithPayments = true;
-                await Save();
+                var confirmed = await JS.InvokeAsync<bool>("confirm", res.Message ?? "La reserva ya tiene pagos y la estadía se está reduciendo. ¿Querés continuar?");
+                if (confirmed)
+                {
+                    _confirmReduceStayWithPayments = true;
+                    await Save();
+                }
+                else
+                {
+                    _saving = false;
+                }
                 return;
             }
 
@@ -394,12 +411,16 @@ else
     }
 
     private async Task OnBookingInputsChangedAsync()
-        => await RefreshPricingPreviewAsync();
+    {
+        _confirmReduceStayWithPayments = false;
+        await RefreshPricingPreviewAsync();
+    }
 
     private async Task OnManualPriceOverrideChangedAsync()
     {
         _pricingError = null;
         _lastPricingRequestKey = null;
+        _confirmManualPriceChange = false;
 
         if (_manualPriceOverride)
             return;
