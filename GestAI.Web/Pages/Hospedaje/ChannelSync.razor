@@ -5,7 +5,7 @@
 @inject GestAI.Web.Service.PropertyFeatureState FeatureState
 
 <PageTitleShared Title="Sincronización de canales"
-                 Subtitle="Conectá calendarios ICS por unidad, importá bloqueos externos y compartí la disponibilidad exportable del hospedaje." />
+                 Subtitle="Conectá calendarios ICS por unidad para importar bloqueos externos y compartir la disponibilidad exportable del hospedaje." />
 
 @if (!_featureChecked)
 {
@@ -25,7 +25,7 @@ else if (!_syncEnabled)
 else if (!_loaded && string.IsNullOrWhiteSpace(_loadError))
 {
     <EmptyState Title="Preparando sincronización de canales"
-                Description="Estamos cargando unidades, conexiones, logs y la configuración operativa del worker."
+                Description="Estamos cargando unidades, conexiones y logs recientes para este hospedaje."
                 Icon="bi-arrow-repeat" />
 }
 else if (!string.IsNullOrWhiteSpace(_loadError))
@@ -39,45 +39,6 @@ else if (!string.IsNullOrWhiteSpace(_loadError))
 }
 else
 {
-    <div class="row g-3 mb-3">
-        <div class="col-12 col-xl-4">
-            <div class="card h-100">
-                <div class="card-body">
-                    <div class="small text-uppercase text-muted fw-semibold mb-2">Estado global</div>
-                    <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
-                        <span class="ui-badge @(AutoSyncWorkerEnabled ? "ui-badge-success" : "ui-badge-warning")">
-                            <i class="bi @(AutoSyncWorkerEnabled ? "bi-check2-circle" : "bi-pause-circle")"></i>
-                            @(AutoSyncWorkerEnabled ? "Worker automático activo" : "Worker automático apagado")
-                        </span>
-                    </div>
-                    <div class="small text-muted">
-                        @(AutoSyncWorkerEnabled
-                            ? $"La API ejecuta auto sync cada {_config?.IntervalMinutes ?? 30} minutos."
-                            : "Las conexiones pueden guardarse, pero el auto sync no se ejecutará hasta habilitar la configuración global en la API.")
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-xl-4">
-            <div class="card h-100">
-                <div class="card-body">
-                    <div class="small text-uppercase text-muted fw-semibold mb-2">Conexiones activas</div>
-                    <div class="display-6 fw-bold mb-1">@ActiveConnectionsCount</div>
-                    <div class="small text-muted">de @VisibleConnectionsCount visibles para el filtro actual.</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-xl-4">
-            <div class="card h-100">
-                <div class="card-body">
-                    <div class="small text-uppercase text-muted fw-semibold mb-2">Último estado</div>
-                    <div class="display-6 fw-bold mb-1">@LastSuccessLabel</div>
-                    <div class="small text-muted">Última sincronización exitosa registrada.</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <div class="row g-3">
         <div class="col-lg-5">
             <div class="card">
@@ -93,7 +54,11 @@ else
                         }
                     </div>
 
-                    @if (ValidationMessages.Count > 0)
+                    <div class="alert alert-info">
+                        El auto sync por conexión es opcional y requiere que la API tenga habilitada la configuración global <code>ExternalCalendarAutoSync:Enabled</code>.
+                    </div>
+
+                    @if (_attemptedSave && ValidationMessages.Count > 0)
                     {
                         <div class="alert alert-warning">
                             <div class="fw-semibold mb-1">Antes de guardar, revisá lo siguiente:</div>
@@ -137,7 +102,7 @@ else
 
                         <div class="col-12">
                             <label class="form-label">URL ICS a importar</label>
-                            <input class="form-control @(ShowValidationState(!IsImportUrlValid) ? "is-invalid" : string.Empty)"
+                            <input class="form-control @(ShowImportUrlValidationState ? "is-invalid" : string.Empty)"
                                    @bind="_formImportUrl"
                                    placeholder="https://.../calendar.ics" />
                             <div class="form-text">Acepta URLs `http` o `https` publicadas por Booking, Airbnb u otro canal compatible.</div>
@@ -157,12 +122,12 @@ else
                                     </span>
                                 </label>
 
-                                <label class="form-check channel-sync-toggle-card @(CanEditAutoSync ? string.Empty : "channel-sync-toggle-card-disabled")">
+                                <label class="form-check channel-sync-toggle-card @(!_formIsActive ? "channel-sync-toggle-card-disabled" : string.Empty)">
                                     <input id="sync-auto"
                                            type="checkbox"
                                            class="form-check-input"
                                            checked="@_formAutoSync"
-                                           disabled="@(!CanEditAutoSync)"
+                                           disabled="@(!_formIsActive)"
                                            @onchange="OnAutoSyncChanged" />
                                     <span>
                                         <span class="d-block fw-semibold">Auto sync por conexión</span>
@@ -242,7 +207,7 @@ else
                                             </td>
                                             <td>
                                                 <div><span class="badge @ChannelBadge(item.ChannelType)">@item.ChannelType</span></div>
-                                                <div class="small text-muted mt-1">@AutoSyncStatusLabel(item)</div>
+                                                <div class="small text-muted mt-1">@(item.AutoSyncEnabled ? "Auto sync marcado" : "Solo sync manual")</div>
                                             </td>
                                             <td>
                                                 <div><span class="badge @SyncBadge(item.LastSyncStatus)">@SyncStatusLabel(item.LastSyncStatus)</span></div>
@@ -323,7 +288,6 @@ else
     private bool _syncEnabled = true;
     private bool _loaded;
     private string? _loadError;
-    private ExternalCalendarSyncConfigurationDto? _config;
     private List<UnitListItemDto> _units = new();
     private List<ExternalCalendarConnectionDto> _connections = new();
     private List<ExternalSyncLogDto> _logs = new();
@@ -339,17 +303,14 @@ else
     private string? _message;
     private bool _success;
 
-    private bool AutoSyncWorkerEnabled => _config?.AutoSyncWorkerEnabled == true;
-    private bool CanEditAutoSync => _formIsActive && AutoSyncWorkerEnabled;
     private bool IsImportUrlValid => Uri.TryCreate(_formImportUrl?.Trim(), UriKind.Absolute, out var uri)
         && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+    private bool ShowImportUrlValidationState => _attemptedSave && (string.IsNullOrWhiteSpace(_formImportUrl) || !IsImportUrlValid);
 
     private string AutoSyncHelperText
         => !_formIsActive
             ? "Primero activá la conexión para permitir sync automático."
-            : AutoSyncWorkerEnabled
-                ? $"Se procesará junto al worker global cada {_config?.IntervalMinutes ?? 30} minutos."
-                : "El worker global de la API está apagado. Esta opción queda informativa hasta habilitarlo.";
+            : "Marcala solo si querés que esta conexión participe del worker automático cuando esté habilitado en la API.";
 
     private IReadOnlyList<string> ValidationMessages
     {
@@ -367,10 +328,6 @@ else
             return errors;
         }
     }
-
-    private int VisibleConnectionsCount => FilteredConnections().Count();
-    private int ActiveConnectionsCount => FilteredConnections().Count(x => x.IsActive);
-    private string LastSuccessLabel => _logs.FirstOrDefault(x => x.Status == ExternalSyncStatus.Success)?.CreatedAtUtc.ToLocalTime().ToString("dd/MM HH:mm") ?? "Sin éxito";
 
     protected override async Task OnParametersSetAsync()
     {
@@ -392,14 +349,12 @@ else
             var unitsResponse = await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units");
             var connectionsResponse = await Api.GetAsync<AppResult<List<ExternalCalendarConnectionDto>>>($"api/properties/{PropertyId}/external-calendars/connections");
             var logsResponse = await Api.GetAsync<AppResult<List<ExternalSyncLogDto>>>($"api/properties/{PropertyId}/external-calendars/logs");
-            var configResponse = await Api.GetAsync<AppResult<ExternalCalendarSyncConfigurationDto>>($"api/properties/{PropertyId}/external-calendars/configuration");
 
-            if (unitsResponse?.Success != true || connectionsResponse?.Success != true || logsResponse?.Success != true || configResponse?.Success != true)
+            if (unitsResponse?.Success != true || connectionsResponse?.Success != true || logsResponse?.Success != true)
             {
                 _loadError = connectionsResponse?.Message
                     ?? logsResponse?.Message
                     ?? unitsResponse?.Message
-                    ?? configResponse?.Message
                     ?? "No pudimos cargar la sincronización externa para este hospedaje.";
                 return;
             }
@@ -407,7 +362,6 @@ else
             _units = unitsResponse.Data ?? new();
             _connections = connectionsResponse.Data ?? new();
             _logs = logsResponse.Data ?? new();
-            _config = configResponse.Data;
         }
         catch (Exception)
         {
@@ -444,7 +398,7 @@ else
             _formDisplayName.Trim(),
             _formImportUrl.Trim(),
             _formIsActive,
-            _formAutoSync);
+            _formIsActive && _formAutoSync);
 
         var response = await Api.PostAsync<UpsertExternalCalendarConnectionCommand, AppResult<int>>(
             $"api/properties/{PropertyId}/external-calendars/connections",
@@ -523,7 +477,7 @@ else
 
     private void OnAutoSyncChanged(ChangeEventArgs args)
     {
-        if (!CanEditAutoSync)
+        if (!_formIsActive)
         {
             _formAutoSync = false;
             return;
@@ -556,18 +510,4 @@ else
         ExternalSyncStatus.Error => "Error",
         _ => "Nunca"
     };
-
-    private string AutoSyncStatusLabel(ExternalCalendarConnectionDto item)
-    {
-        if (!item.IsActive)
-            return "La conexión está inactiva.";
-
-        if (!item.AutoSyncEnabled)
-            return "Solo sync manual.";
-
-        if (!AutoSyncWorkerEnabled)
-            return "Auto sync marcado, pero el worker global está apagado.";
-
-        return $"Auto sync activo cada {_config?.IntervalMinutes ?? 30} min.";
-    }
 }

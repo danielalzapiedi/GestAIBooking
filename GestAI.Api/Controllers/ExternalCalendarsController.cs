@@ -1,27 +1,15 @@
 using GestAI.Application.ExternalCalendars;
-using GestAI.Application.Common;
-using GestAI.Infrastructure.Calendars;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 
 namespace GestAI.Api.Controllers;
 
 [ApiController]
 [Route("api/properties/{propertyId:int}/external-calendars")]
 [Authorize]
-public sealed class ExternalCalendarsController(
-    IMediator mediator,
-    IOptionsSnapshot<ExternalCalendarAutoSyncOptions> autoSyncOptions) : ControllerBase
+public sealed class ExternalCalendarsController(IMediator mediator) : ControllerBase
 {
-    [HttpGet("configuration")]
-    public IActionResult Configuration()
-        => Ok(AppResult<ExternalCalendarSyncConfigurationDto>.Ok(new ExternalCalendarSyncConfigurationDto(
-            autoSyncOptions.Value.Enabled,
-            autoSyncOptions.Value.IntervalMinutes,
-            autoSyncOptions.Value.BatchSize)));
-
     [HttpGet("connections")]
     public async Task<IActionResult> Connections(int propertyId, [FromQuery] int? unitId, CancellationToken ct)
         => Ok(await mediator.Send(new GetExternalCalendarConnectionsQuery(propertyId, unitId), ct));
