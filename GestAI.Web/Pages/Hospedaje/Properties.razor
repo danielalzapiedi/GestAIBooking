@@ -5,36 +5,50 @@
 
 <PageTitle>Hospedajes</PageTitle>
 
-<div class="pagetitle d-flex justify-content-between align-items-center">
+<div class="pagetitle d-flex justify-content-between align-items-center flex-wrap gap-2">
     <div>
         <h1>Hospedajes</h1>
-        <p class="text-muted mb-0">Administrá tus hospedajes, su configuración general y acceso rápido a unidades y tarifas.</p>
+        <p class="text-muted mb-0">Administrá tus hospedajes, su configuración general y acceso rápido a unidades, tarifas y funciones habilitadas.</p>
     </div>
-    <button class="btn btn-primary" @onclick='() => Nav.NavigateTo("/properties/new")'>
-        <i class="bi bi-plus-circle me-1"></i> Nuevo hospedaje
-    </button>
+    @if (CanCreateProperty)
+    {
+        <button class="btn btn-primary" @onclick='() => Nav.NavigateTo("/properties/new")'>
+            <i class="bi bi-plus-circle me-1"></i> Nuevo hospedaje
+        </button>
+    }
 </div>
 
+@if (!_loaded)
+{
+    <EmptyState Title="Cargando hospedajes" Description="Estamos recuperando la cartera disponible." Icon="bi-buildings" />
+}
+else if (!CanViewProperties)
+{
+    <EmptyState Title="Sin acceso al módulo" Description="Tu rol o plan actual no permiten administrar hospedajes desde esta cuenta." Icon="bi-shield-lock" />
+}
+else
+{
 <div class="card">
     <div class="card-body pt-3">
-        <div class="row g-2 mb-3">
+        <div class="row g-2 mb-3 align-items-end">
             <div class="col-md-5">
+                <label class="form-label">Buscar</label>
                 <input class="form-control" placeholder="Buscar por nombre, ciudad o país" @bind="_search" />
             </div>
             <div class="col-md-3">
+                <label class="form-label">Estado</label>
                 <select class="form-select" @bind="_activeFilter">
                     <option value="all">Todos los estados</option>
                     <option value="active">Solo activos</option>
                     <option value="inactive">Solo inactivos</option>
                 </select>
             </div>
+            <div class="col-md-4 text-md-end">
+                <span class="text-muted small">@Filtered.Count() hospedaje(s)</span>
+            </div>
         </div>
 
-        @if (!_loaded)
-        {
-            <EmptyState Title="Cargando hospedajes" Description="Estamos recuperando la cartera disponible." Icon="bi-buildings" />
-        }
-        else if (!Filtered.Any())
+        @if (!Filtered.Any())
         {
             <EmptyState Title="Sin hospedajes para mostrar" Description="Probá ajustar la búsqueda o el filtro de estado." Icon="bi-search" />
         }
@@ -68,10 +82,21 @@
                             </td>
                             <td>@item.UnitsCount</td>
                             <td class="text-end">
-                                <button class="btn btn-sm btn-outline-primary me-1" @onclick='() => Nav.NavigateTo($"/properties/{item.Id}/edit")'>Editar</button>
-                                <button class="btn btn-sm btn-outline-secondary me-1" @onclick='() => Nav.NavigateTo($"/units/{item.Id}")'>Unidades</button>
-                                <button class="btn btn-sm btn-outline-dark me-1" @onclick='() => Nav.NavigateTo($"/rates/{item.Id}")'>Tarifas</button>
-                                <button class="btn btn-sm btn-outline-info" @onclick='() => Nav.NavigateTo($"/properties/{item.Id}/features")'>Funciones</button>
+                                <div class="table-actions justify-content-end">
+                                    @if (CanManageConfiguration)
+                                    {
+                                        <button class="btn btn-sm btn-outline-primary" @onclick='() => Nav.NavigateTo($"/properties/{item.Id}/edit")'>Editar</button>
+                                        <button class="btn btn-sm btn-outline-info" @onclick='() => Nav.NavigateTo($"/properties/{item.Id}/features")'>Funciones</button>
+                                    }
+                                    @if (CanViewUnits)
+                                    {
+                                        <button class="btn btn-sm btn-outline-secondary" @onclick='() => Nav.NavigateTo($"/units/{item.Id}")'>Unidades</button>
+                                    }
+                                    @if (CanViewRates)
+                                    {
+                                        <button class="btn btn-sm btn-outline-dark" @onclick='() => Nav.NavigateTo($"/rates/{item.Id}")'>Tarifas</button>
+                                    }
+                                </div>
                             </td>
                         </tr>
                     }
@@ -81,12 +106,20 @@
         }
     </div>
 </div>
+}
 
 @code {
     private bool _loaded;
     private List<PropertyListItemDto> _items = new();
+    private CurrentUserAccessDto? _access;
     private string _search = string.Empty;
     private string _activeFilter = "all";
+
+    private bool CanViewProperties => HasModule(SaasModule.Properties);
+    private bool CanCreateProperty => CanViewProperties;
+    private bool CanViewUnits => HasModule(SaasModule.Units);
+    private bool CanViewRates => HasModule(SaasModule.Rates);
+    private bool CanManageConfiguration => HasModule(SaasModule.Configuration);
 
     private IEnumerable<PropertyListItemDto> Filtered => _items.Where(x =>
         (_activeFilter == "all" || (_activeFilter == "active" && x.IsActive) || (_activeFilter == "inactive" && !x.IsActive))
@@ -98,10 +131,20 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var res = await Api.GetAsync<AppResult<List<PropertyListItemDto>>>("api/properties/mine");
-        _items = res?.Data ?? new();
+        var accessResponse = await Api.GetAsync<AppResult<CurrentUserAccessDto>>("api/saas/me/access");
+        _access = accessResponse?.Success == true ? accessResponse.Data : null;
+
+        if (CanViewProperties)
+        {
+            var res = await Api.GetAsync<AppResult<List<PropertyListItemDto>>>("api/properties/mine");
+            _items = res?.Data ?? new();
+        }
+
         _loaded = true;
     }
+
+    private bool HasModule(SaasModule module)
+        => _access?.Modules?.Any(x => x.Module == module && x.Allowed) ?? false;
 
     private static string FormatLocation(string? city, string? country)
     {
