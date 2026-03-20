@@ -17,9 +17,17 @@
 
 <div class="card mb-3">
     <div class="card-body pt-3">
+        @if (!string.IsNullOrWhiteSpace(_pageError))
+        {
+            <div class="alert alert-danger">@_pageError</div>
+        }
         @if (!_loaded)
         {
             <p>Cargando usuarios...</p>
+        }
+        else if (!string.IsNullOrWhiteSpace(_pageError))
+        {
+            <div class="alert alert-light border">No pudimos obtener la lista de usuarios o los hospedajes disponibles.</div>
         }
         else if (!_items.Any())
         {
@@ -113,6 +121,7 @@
     private bool _showPassword;
     private bool _saving;
     private string? _error;
+    private string? _pageError;
     private List<AccountUserListItemDto> _items = new();
     private List<PropertyListItemDto> _properties = new();
     private UpsertAccountUserCommand _form = new(null, "", "", "", true, InternalUserRole.Reception, null, GenerateTemporaryPassword());
@@ -124,10 +133,22 @@
 
     private async Task LoadAsync()
     {
+        _pageError = null;
+
         var users = await Api.GetAsync<AppResult<List<AccountUserListItemDto>>>("api/saas/users");
-        _items = users?.Data ?? new();
         var props = await Api.GetAsync<AppResult<List<PropertyListItemDto>>>("api/properties/mine");
-        _properties = props?.Data ?? new();
+
+        if (users?.Success != true || props?.Success != true)
+        {
+            _items = new();
+            _properties = new();
+            _pageError = users?.Message ?? props?.Message ?? "No se pudo cargar la información de usuarios.";
+            _loaded = true;
+            return;
+        }
+
+        _items = users.Data ?? new();
+        _properties = props.Data ?? new();
         _loaded = true;
     }
 
@@ -173,7 +194,14 @@
 
     private async Task Toggle(AccountUserListItemDto item)
     {
-        await Api.PostAsync($"api/saas/users/{item.UserId}/status", new { isActive = !item.IsActive });
+        _pageError = null;
+        var response = await Api.PostJsonAsync<AppResult, object>($"api/saas/users/{item.UserId}/status", new { isActive = !item.IsActive });
+        if (response?.Success != true)
+        {
+            _pageError = response?.Message ?? "No se pudo actualizar el estado del usuario.";
+            return;
+        }
+
         await LoadAsync();
     }
 
