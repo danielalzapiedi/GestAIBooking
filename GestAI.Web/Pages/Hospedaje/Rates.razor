@@ -16,6 +16,11 @@ else if (!_advancedRatesEnabled)
     <FeatureDisabledState PropertyId="@PropertyId"
                           FeatureName="Las tarifas avanzadas" />
 }
+else if (_moduleUnavailable)
+{
+    <ModuleUnavailableState PropertyId="@PropertyId"
+                            ModuleName="Tarifas" />
+}
 else
 {
 <div class="pagetitle d-flex justify-content-between align-items-center">
@@ -104,6 +109,7 @@ else
     [Parameter] public int PropertyId { get; set; }
     private bool _featureChecked;
     private bool _advancedRatesEnabled = true;
+    private bool _moduleUnavailable;
     private bool _loaded;
     private List<RatePlanDto> _rates = new();
     private List<UnitListItemDto> _units = new();
@@ -121,11 +127,22 @@ else
         var settings = await FeatureState.EnsureAsync(PropertyId);
         _advancedRatesEnabled = settings?.EnableAdvancedRates ?? true;
         _featureChecked = true;
+        _moduleUnavailable = false;
         if (!_advancedRatesEnabled)
             return;
 
         _loaded = false;
-        _rates = (await Api.GetAsync<AppResult<List<RatePlanDto>>>($"api/properties/{PropertyId}/rates"))?.Data ?? new();
+        var ratesResponse = await Api.GetAsync<AppResult<List<RatePlanDto>>>($"api/properties/{PropertyId}/rates");
+        if (ratesResponse?.Success == false && ratesResponse.ErrorCode == "forbidden")
+        {
+            _moduleUnavailable = true;
+            _rates = new();
+            _units = new();
+            _loaded = true;
+            return;
+        }
+
+        _rates = ratesResponse?.Data ?? new();
         _units = (await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units"))?.Data ?? new();
         _loaded = true;
     }

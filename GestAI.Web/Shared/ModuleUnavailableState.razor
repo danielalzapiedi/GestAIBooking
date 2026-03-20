@@ -1,0 +1,25 @@
+@inject NavigationManager Nav
+
+<EmptyState Title="Módulo no disponible"
+            Description="@ResolvedDescription"
+            Icon="bi-shield-lock">
+    <button class="btn btn-outline-primary" @onclick='() => Nav.NavigateTo("/account")'>
+        Ir a cuenta
+    </button>
+    <button class="btn btn-light border" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>
+        Volver al dashboard
+    </button>
+</EmptyState>
+
+@code {
+    [Parameter] public int PropertyId { get; set; }
+    [Parameter] public string? ModuleName { get; set; }
+    [Parameter] public string? Description { get; set; }
+
+    private string ResolvedDescription
+        => !string.IsNullOrWhiteSpace(Description)
+            ? Description!
+            : string.IsNullOrWhiteSpace(ModuleName)
+                ? "Tu rol o plan actual no tienen acceso a este módulo."
+                : $"Tu rol o plan actual no tienen acceso al módulo {ModuleName}. Si necesitás usarlo, revisá permisos y plan de la cuenta.";
+}

@@ -1,5 +1,6 @@
 @page "/quotes/{PropertyId:int}"
 @using GestAI.Web.Dtos
+@using GestAI.Web.Helpers
 @inject ApiClient Api
 @inject NavigationManager Nav
 @inject GestAI.Web.Service.PropertyFeatureState FeatureState
@@ -248,8 +249,8 @@ else
         var settings = await FeatureState.EnsureAsync(PropertyId);
         _quotesEnabled = settings?.EnableQuotes ?? true;
         _savedQuotesEnabled = settings?.EnableSavedQuotes ?? true;
-        _promotionsEnabled = settings?.EnablePromotions ?? true;
-        _advancedRatesEnabled = settings?.EnableAdvancedRates ?? true;
+        _promotionsEnabled = (settings?.EnablePromotions ?? true) && PropertyFeatureModulePolicy.IsAvailable(settings, nameof(PropertyFeatureSettingsDto.EnablePromotions));
+        _advancedRatesEnabled = (settings?.EnableAdvancedRates ?? true) && PropertyFeatureModulePolicy.IsAvailable(settings, nameof(PropertyFeatureSettingsDto.EnableAdvancedRates));
         _featureChecked = true;
         if (!_quotesEnabled)
             return;

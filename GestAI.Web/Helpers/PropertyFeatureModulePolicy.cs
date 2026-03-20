@@ -14,4 +14,14 @@ public static class PropertyFeatureModulePolicy
             nameof(PropertyFeatureSettingsDto.EnableReports) => SaasModule.Reports,
             _ => null
         };
+
+    public static bool IsAvailable(PropertyFeatureSettingsDto? settings, string featureKey)
+    {
+        var requiredModule = GetRequiredModule(featureKey);
+        if (!requiredModule.HasValue)
+            return true;
+
+        var availability = settings?.ModuleAvailability?.FirstOrDefault(x => x.FeatureKey == featureKey);
+        return availability?.AvailableByPlan ?? true;
+    }
 }

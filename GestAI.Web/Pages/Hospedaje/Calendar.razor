@@ -3,6 +3,7 @@
 @inject NavigationManager Nav
 @inject GestAI.Web.Service.PropertyFeatureState FeatureState
 @using GestAI.Web.Dtos
+@using GestAI.Web.Helpers
 
 <PageTitle>Calendario</PageTitle>
 
@@ -237,7 +238,7 @@
         _loaded = false;
         var settings = await FeatureState.EnsureAsync(PropertyId);
         _externalSyncEnabled = settings?.EnableExternalCalendarSync ?? true;
-        _housekeepingEnabled = settings?.EnableHousekeeping ?? true;
+        _housekeepingEnabled = (settings?.EnableHousekeeping ?? true) && PropertyFeatureModulePolicy.IsAvailable(settings, nameof(PropertyFeatureSettingsDto.EnableHousekeeping));
         _units = (await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units"))?.Data ?? new();
         _bookings = (await Api.GetAsync<AppResult<List<CalendarBookingDto>>>($"api/properties/{PropertyId}/bookings/range?from={_from:yyyy-MM-dd}&to={_toExclusive:yyyy-MM-dd}"))?.Data ?? new();
         _blocked = (await Api.GetAsync<AppResult<List<BlockedDateDto>>>($"api/properties/{PropertyId}/blockedDates/range?from={_from:yyyy-MM-dd}&to={_toExclusive:yyyy-MM-dd}"))?.Data ?? new();
