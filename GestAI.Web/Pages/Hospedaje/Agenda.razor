@@ -10,8 +10,8 @@
 }
 else if (!_agendaEnabled)
 {
-    <EmptyState Title="Funcionalidad desactivada" Description="La agenda está desactivada para este hospedaje." Icon="bi-toggle-off" />
-    <button class="btn btn-outline-primary" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>Ir al dashboard</button>
+    <FeatureDisabledState PropertyId="@PropertyId"
+                          FeatureName="La agenda operativa" />
 }
 else
 {

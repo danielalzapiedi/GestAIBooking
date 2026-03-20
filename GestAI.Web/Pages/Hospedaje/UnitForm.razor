@@ -20,28 +20,137 @@
 }
 else
 {
-    @if (!string.IsNullOrWhiteSpace(_message))
+    @if (!string.IsNullOrWhiteSpace(_loadError))
     {
-        <div class="alert @(_success ? "alert-success" : "alert-danger")">@_message</div>
+        <EmptyState Title="No pudimos cargar la unidad" Description="@_loadError" Icon="bi-exclamation-triangle">
+            <button class="btn btn-outline-primary" @onclick="ReloadAsync">Reintentar</button>
+        </EmptyState>
     }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(_message))
+        {
+            <div class="alert @(_success ? "alert-success" : "alert-danger")">@_message</div>
+        }
 
-    <EditForm Model="_model" OnValidSubmit="Save">
-        <div class="card"><div class="card-body pt-3"><div class="row g-3">
-            <div class="col-md-6"><label class="form-label">Nombre</label><input class="form-control" @bind="_model.Name" /></div>
-            <div class="col-md-3"><label class="form-label">Activa</label><select class="form-select" @bind="_model.IsActive"><option value="true">Sí</option><option value="false">No</option></select></div>
-            <div class="col-md-3"><label class="form-label">Orden</label><input class="form-control" type="number" @bind="_model.DisplayOrder" /></div>
-            <div class="col-md-3"><label class="form-label">Adultos</label><input class="form-control" type="number" @bind="_model.CapacityAdults" /></div>
-            <div class="col-md-3"><label class="form-label">Niños</label><input class="form-control" type="number" @bind="_model.CapacityChildren" /></div>
-            <div class="col-md-3"><label class="form-label">Capacidad total</label><input class="form-control" type="number" @bind="_model.TotalCapacity" /></div>
-            <div class="col-md-3"><label class="form-label">Tarifa base</label><input class="form-control" type="number" step="0.01" @bind="_model.BaseRate" /></div>
-            <div class="col-md-4"><label class="form-label">Estado operativo</label><select class="form-select" @bind="_model.OperationalStatus">@foreach (var status in Enum.GetValues<UnitOperationalStatus>()){<option value="@status">@status</option>}</select></div>
-            <div class="col-12"><label class="form-label">Descripción corta</label><textarea class="form-control" rows="3" @bind="_model.ShortDescription"></textarea></div>
-            <div class="col-12 d-flex justify-content-end gap-2">
-                <button type="button" class="btn btn-outline-secondary" @onclick='() => Nav.NavigateTo($"/units/{PropertyId}")'>Cancelar</button>
-                <button type="submit" class="btn btn-primary" disabled="@_saving">@(_saving ? "Guardando..." : "Guardar")</button>
+        <EditForm Model="_model" OnValidSubmit="Save">
+            <div class="row g-3">
+                <div class="col-12 col-xl-8">
+                    <div class="card h-100">
+                        <div class="card-body pt-3">
+                            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+                                <div>
+                                    <h5 class="card-title mb-1">Datos de la unidad</h5>
+                                    <div class="small text-muted">Definí capacidad, tarifa base y estado operativo para esta unidad.</div>
+                                </div>
+                                <span class="ui-badge @( _model.IsActive ? "ui-badge-success" : "ui-badge-secondary")">@ActiveLabel(_model.IsActive)</span>
+                            </div>
+
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Nombre</label>
+                                    <input class="form-control" @bind="_model.Name" placeholder="Ej. Habitación 101" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Activa</label>
+                                    <select class="form-select" @bind="_model.IsActive">
+                                        <option value="true">Sí</option>
+                                        <option value="false">No</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Orden</label>
+                                    <input class="form-control" type="number" @bind="_model.DisplayOrder" />
+                                    <div class="form-text">Usado para ordenar la unidad en listados y calendario.</div>
+                                </div>
+
+                                <div class="col-12">
+                                    <hr class="my-1" />
+                                    <div class="fw-semibold">Capacidad</div>
+                                    <div class="small text-muted">La capacidad total no debería ser menor que la suma entre adultos y niños.</div>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <label class="form-label">Adultos</label>
+                                    <input class="form-control" type="number" min="0" @bind="_model.CapacityAdults" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Niños</label>
+                                    <input class="form-control" type="number" min="0" @bind="_model.CapacityChildren" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Capacidad total</label>
+                                    <input class="form-control" type="number" min="0" @bind="_model.TotalCapacity" />
+                                    <div class="form-text">Mínimo sugerido: @SuggestedCapacity huésped(es).</div>
+                                </div>
+
+                                <div class="col-12">
+                                    <hr class="my-1" />
+                                    <div class="fw-semibold">Operación y venta</div>
+                                    <div class="small text-muted">Estos datos se usan para disponibilidad, housekeeping y cotización.</div>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <label class="form-label">Tarifa base</label>
+                                    <input class="form-control" type="number" min="0" step="0.01" @bind="_model.BaseRate" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Estado operativo</label>
+                                    <select class="form-select" @bind="_model.OperationalStatus">
+                                        @foreach (var status in Enum.GetValues<UnitOperationalStatus>())
+                                        {
+                                            <option value="@status">@OperationalStatusLabel(status)</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label">Descripción corta</label>
+                                    <textarea class="form-control" rows="3" @bind="_model.ShortDescription" placeholder="Sumá una descripción breve para el equipo o para referencia interna."></textarea>
+                                </div>
+
+                                <div class="col-12 d-flex justify-content-end gap-2">
+                                    <button type="button" class="btn btn-outline-secondary" @onclick='() => Nav.NavigateTo($"/units/{PropertyId}")'>Cancelar</button>
+                                    <button type="submit" class="btn btn-primary" disabled="@_saving">@(_saving ? "Guardando..." : "Guardar")</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-4">
+                    <div class="card h-100">
+                        <div class="card-body pt-3">
+                            <h5 class="card-title mb-3">Resumen rápido</h5>
+
+                            <div class="summary-pill-grid">
+                                <div class="summary-pill">
+                                    <div class="label">Estado</div>
+                                    <div class="value">@OperationalStatusLabel(_model.OperationalStatus)</div>
+                                </div>
+                                <div class="summary-pill">
+                                    <div class="label">Capacidad</div>
+                                    <div class="value">@_model.TotalCapacity huésped(es)</div>
+                                </div>
+                                <div class="summary-pill">
+                                    <div class="label">Tarifa base</div>
+                                    <div class="value">@_model.BaseRate.ToString("0.00")</div>
+                                </div>
+                            </div>
+
+                            <div class="mt-4 small text-muted">
+                                <div class="fw-semibold text-dark mb-2">Chequeos sugeridos</div>
+                                <ul class="mb-0 ps-3">
+                                    <li>Adultos + niños: @SuggestedCapacity.</li>
+                                    <li>Capacidad total configurada: @_model.TotalCapacity.</li>
+                                    <li>La unidad está @ActiveDescription(_model.IsActive).</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-        </div></div></div>
-    </EditForm>
+        </EditForm>
+    }
 }
 
 @code {
@@ -50,9 +159,11 @@ else
 
     private UnitListItemDto _model = null!;
     private bool _loaded;
+    private string? _loadError;
     private string? _message;
     private bool _saving;
     private bool _success;
+    private int SuggestedCapacity => Math.Max(0, _model.CapacityAdults) + Math.Max(0, _model.CapacityChildren);
 
     private UnitListItemDto NewModel() => new()
     {
@@ -70,7 +181,13 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
         _message = null;
+        _loadError = null;
         if (!UnitId.HasValue)
         {
             _model = NewModel();
@@ -79,12 +196,48 @@ else
         }
 
         var res = await Api.GetAsync<AppResult<UnitListItemDto>>($"api/properties/{PropertyId}/units/{UnitId}");
-        _model = res?.Data ?? NewModel();
+        if (res?.Success != true || res.Data is null)
+        {
+            _model = NewModel();
+            _loadError = res?.Message ?? "No se pudo obtener la unidad seleccionada.";
+            _loaded = true;
+            return;
+        }
+
+        _model = res.Data;
         _loaded = true;
     }
 
     private async Task Save()
     {
+        _message = null;
+        _success = false;
+        _model.Name = _model.Name.Trim();
+
+        if (string.IsNullOrWhiteSpace(_model.Name))
+        {
+            _message = "Indicá un nombre para la unidad.";
+            return;
+        }
+
+        if (_model.CapacityAdults < 0 || _model.CapacityChildren < 0 || _model.TotalCapacity < 0)
+        {
+            _message = "La capacidad no puede tener valores negativos.";
+            return;
+        }
+
+        if (_model.TotalCapacity < SuggestedCapacity)
+        {
+            _message = $"La capacidad total debe ser al menos {SuggestedCapacity} para cubrir adultos y niños.";
+            return;
+        }
+
+        if (_model.BaseRate < 0)
+        {
+            _message = "La tarifa base no puede ser negativa.";
+            return;
+        }
+
         _saving = true;
         var cmd = new UpsertUnitCommand(PropertyId, UnitId, _model.Name, _model.CapacityAdults, _model.CapacityChildren, _model.BaseRate, _model.TotalCapacity, _model.ShortDescription, _model.IsActive, _model.DisplayOrder, _model.OperationalStatus);
         try
@@ -101,4 +254,19 @@ else
             _saving = false;
         }
     }
+
+    private static string OperationalStatusLabel(UnitOperationalStatus status) => status switch
+    {
+        UnitOperationalStatus.Available => "Disponible",
+        UnitOperationalStatus.Occupied => "Ocupada",
+        UnitOperationalStatus.PendingCleaning => "Pendiente de limpieza",
+        UnitOperationalStatus.Cleaning => "En limpieza",
+        UnitOperationalStatus.Clean => "Lista",
+        UnitOperationalStatus.Maintenance => "Mantenimiento",
+        _ => status.ToString()
+    };
+
+    private static string ActiveLabel(bool isActive) => isActive ? "Activa" : "Inactiva";
+
+    private static string ActiveDescription(bool isActive) => isActive ? "habilitada para operar" : "marcada como inactiva";
 }

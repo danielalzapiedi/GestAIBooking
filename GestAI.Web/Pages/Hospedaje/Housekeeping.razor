@@ -6,33 +6,62 @@
 @inject GestAI.Web.Service.PropertyFeatureState FeatureState
 
 <PageTitle>Housekeeping</PageTitle>
+
 @if (!_featureChecked)
 {
     <EmptyState Title="Cargando configuración" Description="Estamos validando las funciones habilitadas para este hospedaje." Icon="bi-hourglass-split" />
 }
 else if (!_housekeepingEnabled)
 {
-    <EmptyState Title="Funcionalidad desactivada" Description="Housekeeping está desactivado para este hospedaje." Icon="bi-toggle-off" />
-    <button class="btn btn-outline-primary" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>Ir al dashboard</button>
+    <FeatureDisabledState PropertyId="@PropertyId"
+                          FeatureName="Housekeeping" />
 }
 else
 {
-    <h1 class="h3 mb-3">Housekeeping / Limpieza</h1>
+    <div class="pagetitle d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <h1>Housekeeping / Limpieza</h1>
+            <p class="text-muted mb-0">Seguimiento operativo de limpiezas pendientes, en curso y completadas por unidad.</p>
+        </div>
+        <button class="btn btn-outline-primary" @onclick="Load"><i class="bi bi-arrow-repeat"></i> Actualizar</button>
+    </div>
 
-    @if (_tasks is null)
+    @if (!string.IsNullOrWhiteSpace(_error))
     {
-        <p>Cargando...</p>
+        <div class="alert alert-danger">@_error</div>
+    }
+
+    @if (!_loaded)
+    {
+        <EmptyState Title="Cargando housekeeping"
+                    Description="Estamos trayendo tareas de limpieza y estado operativo de las unidades."
+                    Icon="bi-brush" />
     }
     else
     {
+        <div class="summary-pill-grid mb-3">
+            <div class="summary-pill"><div class="label">Pendientes</div><div class="value">@PendingTasks</div></div>
+            <div class="summary-pill"><div class="label">En limpieza</div><div class="value">@InProgressTasks</div></div>
+            <div class="summary-pill"><div class="label">Completadas</div><div class="value">@CompletedTasks</div></div>
+        </div>
+
         <div class="row g-3">
             <div class="col-12 col-lg-8">
                 <div class="card">
                     <div class="card-body">
-                        <h5 class="card-title">Tareas pendientes</h5>
-                        @if (_tasks.Count == 0)
+                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+                            <div>
+                                <h5 class="card-title mb-1">Tareas de limpieza</h5>
+                                <div class="small text-muted">Tareas operativas generadas por check-outs y seguimiento manual.</div>
+                            </div>
+                            <span class="ui-badge ui-badge-info">@(_tasks?.Count ?? 0)</span>
+                        </div>
+
+                        @if (_tasks is null || _tasks.Count == 0)
                         {
-                            <p class="text-muted">No hay tareas pendientes.</p>
+                            <EmptyState Title="No hay tareas pendientes"
+                                        Description="No hay limpiezas activas para este hospedaje en este momento."
+                                        Icon="bi-check2-circle" />
                         }
                         else
                         {
@@ -45,15 +74,15 @@ else
                                         @foreach (var task in _tasks)
                                         {
                                             <tr>
-                                                <td>@task.UnitName</td>
+                                                <td>@(task.UnitName ?? "Sin unidad")</td>
                                                 <td>@task.Title<div class="small text-muted">@task.Notes</div></td>
-                                                <td>@task.ScheduledDate</td>
-                                                <td>@task.Priority</td>
-                                                <td><span class="badge @StatusBadge(task.Status)">@task.Status</span></td>
-                                                <td>@task.BookingCode</td>
+                                                <td>@task.ScheduledDate.ToString("dd/MM/yyyy")</td>
+                                                <td><span class="badge @PriorityBadge(task.Priority)">@PriorityLabel(task.Priority)</span></td>
+                                                <td><span class="badge @StatusBadge(task.Status)">@StatusLabel(task.Status)</span></td>
+                                                <td>@(task.BookingCode ?? "-")</td>
                                                 <td class="text-end">
                                                     <div class="btn-group btn-group-sm">
-                                                        <button class="btn btn-outline-primary" @onclick="(() => OpenBooking(task.BookingId))">Abrir</button>
+                                                        <button class="btn btn-outline-primary" @onclick="(() => OpenBooking(task.BookingId))" disabled="@(!task.BookingId.HasValue)">Abrir</button>
                                                         @if (task.Status == OperationalTaskStatus.Pending)
                                                         {
                                                             <button class="btn btn-outline-secondary" @onclick="(() => UpdateStatus(task.Id, OperationalTaskStatus.InProgress))">En limpieza</button>
@@ -76,19 +105,36 @@ else
             <div class="col-12 col-lg-4">
                 <div class="card">
                     <div class="card-body">
-                        <h5 class="card-title">Estado de unidades</h5>
+                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+                            <div>
+                                <h5 class="card-title mb-1">Estado de unidades</h5>
+                                <div class="small text-muted">Visibilidad rápida de limpieza por unidad.</div>
+                            </div>
+                            <span class="ui-badge ui-badge-neutral">@UnitsInCleaningFlow.Count</span>
+                        </div>
+
                         @if (_units.Count == 0)
                         {
-                            <p class="text-muted">Sin unidades.</p>
+                            <EmptyState Title="Sin unidades"
+                                        Description="Creá unidades para empezar a gestionar housekeeping."
+                                        Icon="bi-house-door">
+                                <button class="btn btn-outline-primary" @onclick='() => Nav.NavigateTo($"/units/{PropertyId}")'>Ir a unidades</button>
+                            </EmptyState>
+                        }
+                        else if (UnitsInCleaningFlow.Count == 0)
+                        {
+                            <EmptyState Title="No hay unidades en flujo de limpieza"
+                                        Description="Las unidades no tienen estados pendientes de limpieza o en curso."
+                                        Icon="bi-stars" />
                         }
                         else
                         {
                             <ul class="list-group list-group-flush">
-                                @foreach (var u in _units.Where(x => x.OperationalStatus == UnitOperationalStatus.PendingCleaning || x.OperationalStatus == UnitOperationalStatus.Cleaning || x.OperationalStatus == UnitOperationalStatus.Clean))
+                                @foreach (var u in UnitsInCleaningFlow)
                                 {
                                     <li class="list-group-item d-flex justify-content-between">
                                         <span>@u.Name</span>
-                                        <span class="badge bg-secondary">@u.OperationalStatus</span>
+                                        <span class="badge @UnitStatusBadge(u.OperationalStatus)">@UnitStatusLabel(u.OperationalStatus)</span>
                                     </li>
                                 }
                             </ul>
@@ -102,9 +148,20 @@ else
 
 @code {
     [Parameter] public int PropertyId { get; set; }
-    private List<OperationalTaskDto>? _tasks; private List<UnitListItemDto> _units = new();
+    private List<OperationalTaskDto>? _tasks;
+    private List<UnitListItemDto> _units = new();
     private bool _featureChecked;
     private bool _housekeepingEnabled = true;
+    private bool _loaded;
+    private string? _error;
+
+    private int PendingTasks => _tasks?.Count(x => x.Status == OperationalTaskStatus.Pending) ?? 0;
+    private int InProgressTasks => _tasks?.Count(x => x.Status == OperationalTaskStatus.InProgress) ?? 0;
+    private int CompletedTasks => _tasks?.Count(x => x.Status == OperationalTaskStatus.Completed) ?? 0;
+    private List<UnitListItemDto> UnitsInCleaningFlow => _units
+        .Where(x => x.OperationalStatus == UnitOperationalStatus.PendingCleaning || x.OperationalStatus == UnitOperationalStatus.Cleaning || x.OperationalStatus == UnitOperationalStatus.Clean)
+        .ToList();
+
     protected override async Task OnParametersSetAsync()
     {
         var settings = await FeatureState.EnsureAsync(PropertyId);
@@ -113,7 +170,35 @@ else
         if (_housekeepingEnabled)
             await Load();
     }
-    private async Task Load(){ _tasks = (await Api.GetAsync<AppResult<List<OperationalTaskDto>>>($"api/properties/{PropertyId}/operations/tasks?type={OperationalTaskType.Cleaning}"))?.Data ?? new(); _units = (await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units"))?.Data ?? new(); }
+
+    private async Task Load()
+    {
+        _loaded = false;
+        _error = null;
+
+        try
+        {
+            var tasksResponse = await Api.GetAsync<AppResult<List<OperationalTaskDto>>>($"api/properties/{PropertyId}/operations/tasks?type={OperationalTaskType.Cleaning}");
+            var unitsResponse = await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units");
+
+            _tasks = tasksResponse?.Data ?? new();
+            _units = unitsResponse?.Data ?? new();
+
+            if (tasksResponse?.Success == false || unitsResponse?.Success == false)
+                _error = tasksResponse?.Message ?? unitsResponse?.Message ?? "No se pudo cargar housekeeping.";
+        }
+        catch
+        {
+            _error = "Hubo un problema al consultar housekeeping.";
+            _tasks = new();
+            _units = new();
+        }
+        finally
+        {
+            _loaded = true;
+        }
+    }
+
     private async Task Complete(int taskId)
     {
         var confirmed = await JS.InvokeAsync<bool>("confirm", "¿Marcar la limpieza como completada? La unidad quedará disponible como limpia.");
@@ -129,13 +214,62 @@ else
         await Api.PostJsonAsync<AppResult, object>($"api/properties/{PropertyId}/operations/tasks/{taskId}/status", new { Status = status });
         await Load();
     }
-    private void OpenBooking(int? bookingId){ if (bookingId.HasValue) Nav.NavigateTo($"/bookings/{PropertyId}/{bookingId.Value}"); }
+
+    private void OpenBooking(int? bookingId)
+    {
+        if (bookingId.HasValue)
+            Nav.NavigateTo($"/bookings/{PropertyId}/{bookingId.Value}");
+    }
+
+    private static string StatusLabel(OperationalTaskStatus status) => status switch
+    {
+        OperationalTaskStatus.Pending => "Pendiente",
+        OperationalTaskStatus.InProgress => "En limpieza",
+        OperationalTaskStatus.Completed => "Completada",
+        OperationalTaskStatus.Cancelled => "Cancelada",
+        _ => status.ToString()
+    };
+
     private static string StatusBadge(OperationalTaskStatus status) => status switch
     {
         OperationalTaskStatus.Pending => "bg-warning text-dark",
         OperationalTaskStatus.InProgress => "bg-primary",
         OperationalTaskStatus.Completed => "bg-success",
         OperationalTaskStatus.Cancelled => "bg-secondary",
+        _ => "bg-light text-dark border"
+    };
+
+    private static string PriorityLabel(OperationalTaskPriority priority) => priority switch
+    {
+        OperationalTaskPriority.Low => "Baja",
+        OperationalTaskPriority.Medium => "Media",
+        OperationalTaskPriority.High => "Alta",
+        OperationalTaskPriority.Urgent => "Urgente",
+        _ => priority.ToString()
+    };
+
+    private static string PriorityBadge(OperationalTaskPriority priority) => priority switch
+    {
+        OperationalTaskPriority.Low => "bg-light text-dark border",
+        OperationalTaskPriority.Medium => "bg-info-subtle text-info",
+        OperationalTaskPriority.High => "bg-warning-subtle text-warning",
+        OperationalTaskPriority.Urgent => "bg-danger-subtle text-danger",
+        _ => "bg-light text-dark border"
+    };
+
+    private static string UnitStatusLabel(UnitOperationalStatus status) => status switch
+    {
+        UnitOperationalStatus.PendingCleaning => "Pendiente de limpieza",
+        UnitOperationalStatus.Cleaning => "En limpieza",
+        UnitOperationalStatus.Clean => "Limpia",
+        _ => status.ToString()
+    };
+
+    private static string UnitStatusBadge(UnitOperationalStatus status) => status switch
+    {
+        UnitOperationalStatus.PendingCleaning => "bg-warning-subtle text-warning",
+        UnitOperationalStatus.Cleaning => "bg-primary-subtle text-primary",
+        UnitOperationalStatus.Clean => "bg-success-subtle text-success",
         _ => "bg-light text-dark border"
     };
 }

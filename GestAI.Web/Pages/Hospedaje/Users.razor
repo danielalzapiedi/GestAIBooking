@@ -1,6 +1,7 @@
 @page "/users"
 @using GestAI.Web.Dtos
 @inject ApiClient Api
+@inject IJSRuntime JS
 @inject NavigationManager Nav
 
 <PageTitle>Usuarios</PageTitle>
@@ -23,14 +24,33 @@
         }
         @if (!_loaded)
         {
-            <p>Cargando usuarios...</p>
+            <EmptyState Title="Cargando usuarios"
+                        Description="Estamos trayendo los accesos internos y sus hospedajes por defecto."
+                        Icon="bi-people" />
         }
         else if (!_items.Any())
         {
-            <div class="alert alert-light border">No hay usuarios internos cargados.</div>
+            <EmptyState Title="Todavía no hay usuarios internos"
+                        Description="Creá el primer usuario para delegar operación o recepción."
+                        Icon="bi-person-plus">
+                <button class="btn btn-primary" @onclick="NewUser"><i class="bi bi-person-plus me-1"></i> Nuevo usuario</button>
+            </EmptyState>
         }
         else
         {
+            <div class="summary-pill-grid mb-3">
+                <div class="summary-pill"><div class="label">Usuarios</div><div class="value">@_items.Count</div></div>
+                <div class="summary-pill"><div class="label">Activos</div><div class="value">@_items.Count(x => x.IsActive)</div></div>
+                <div class="summary-pill"><div class="label">Con hospedaje</div><div class="value">@_items.Count(x => x.DefaultPropertyId.HasValue)</div></div>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+                <div>
+                    <h5 class="card-title mb-1">Usuarios de la cuenta</h5>
+                    <div class="small text-muted">Accesos internos activos e inactivos con su rol operativo.</div>
+                </div>
+                <span class="ui-badge ui-badge-neutral">@_items.Count</span>
+            </div>
             <div class="table-responsive">
                 <table class="table align-middle">
                     <thead>
@@ -51,7 +71,7 @@
                                 <strong>@item.DisplayName</strong>
                                 <div class="small text-muted">@item.Email</div>
                             </td>
-                            <td><span class="badge bg-info-subtle text-dark">@item.Role</span></td>
+                            <td><span class="badge bg-info-subtle text-dark">@RoleLabel(item.Role)</span></td>
                             <td>@(item.DefaultPropertyName ?? "Sin definir")</td>
                             <td>@(item.LastLoginAtUtc?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "Sin acceso")</td>
                             <td><StatusBadge IsActive="@item.IsActive" /></td>
@@ -81,9 +101,9 @@
                 <div class="col-md-6"><label class="form-label">Nombre</label><input class="form-control" @bind="_form.Nombre" /></div>
                 <div class="col-md-6"><label class="form-label">Apellido</label><input class="form-control" @bind="_form.Apellido" /></div>
                 <div class="col-md-6"><label class="form-label">Email</label><input class="form-control" @bind="_form.Email" /></div>
-                <div class="col-md-3"><label class="form-label">Rol</label><select class="form-select" @bind="_form.Role">@foreach (var role in Enum.GetValues<InternalUserRole>()){<option value="@role">@role</option>}</select></div>
+                <div class="col-md-3"><label class="form-label">Rol</label><select class="form-select" @bind="_form.Role">@foreach (var role in Enum.GetValues<InternalUserRole>()){<option value="@role">@RoleLabel(role)</option>}</select></div>
                 <div class="col-md-3"><label class="form-label">Activo</label><select class="form-select" @bind="_form.IsActive"><option value="true">Sí</option><option value="false">No</option></select></div>
-                <div class="col-md-6"><label class="form-label">Hospedaje por defecto</label><select class="form-select" @bind="_form.DefaultPropertyId"><option value="">Sin definir</option>@foreach(var p in _properties){<option value="@p.Id">@p.Name</option>}</select></div>
+                <div class="col-md-6"><label class="form-label">Hospedaje por defecto</label><select class="form-select" @bind="_form.DefaultPropertyId"><option value="">Sin definir</option>@foreach(var p in _properties){<option value="@p.Id">@p.Name</option>}</select><div class="form-text">Podés dejarlo vacío si el usuario trabaja en más de un hospedaje.</div></div>
                 <div class="col-md-6">
                     <label class="form-label">@(_form.UserId is null ? "Password temporal" : "Nueva contraseña temporal")</label>
                     <div class="input-group">
@@ -167,6 +187,34 @@
     private async Task Save()
     {
         _error = null;
+        _form.Nombre = _form.Nombre.Trim();
+        _form.Apellido = _form.Apellido.Trim();
+        _form.Email = _form.Email.Trim();
+
+        if (string.IsNullOrWhiteSpace(_form.Nombre))
+        {
+            _error = "Ingresá el nombre del usuario.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_form.Apellido))
+        {
+            _error = "Ingresá el apellido del usuario.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_form.Email) || !_form.Email.Contains('@'))
+        {
+            _error = "Ingresá un email válido para el usuario.";
+            return;
+        }
+
+        if (_form.UserId is null && string.IsNullOrWhiteSpace(_form.Password))
+        {
+            _error = "Generá o ingresá una contraseña temporal para crear el usuario.";
+            return;
+        }
+
         _saving = true;
 
         AppResult? response;
@@ -191,6 +239,11 @@
     private async Task Toggle(AccountUserListItemDto item)
     {
         _pageError = null;
+        var action = item.IsActive ? "desactivar" : "activar";
+        var confirmed = await JS.InvokeAsync<bool>("confirm", $"¿Querés {action} al usuario {item.DisplayName}?");
+        if (!confirmed)
+            return;
+
         var response = await Api.PostJsonAsync<AppResult, object>($"api/saas/users/{item.UserId}/status", new { isActive = !item.IsActive });
         if (response?.Success != true)
         {
@@ -211,6 +264,15 @@
     private void TogglePasswordVisibility() => _showPassword = !_showPassword;
 
     private void GeneratePasswordForForm() => _form.Password = GenerateTemporaryPassword();
+
+    private static string RoleLabel(InternalUserRole role) => role switch
+    {
+        InternalUserRole.Owner => "Propietario",
+        InternalUserRole.Admin => "Administrador",
+        InternalUserRole.Reception => "Recepción",
+        InternalUserRole.Operations => "Operaciones",
+        _ => role.ToString()
+    };
 
     private static string GenerateTemporaryPassword()
         => $"Tmp{Guid.NewGuid():N}"[..12] + "!";

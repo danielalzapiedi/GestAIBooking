@@ -1,6 +1,5 @@
 @page "/reports/{PropertyId:int}"
 @inject ApiClient Api
-@inject NavigationManager Nav
 @inject GestAI.Web.Service.PropertyFeatureState FeatureState
 @using GestAI.Web.Dtos
 
@@ -10,8 +9,8 @@
 }
 else if (!_reportsEnabled)
 {
-    <EmptyState Title="Funcionalidad desactivada" Description="Los reportes están desactivados para este hospedaje." Icon="bi-toggle-off" />
-    <button class="btn btn-outline-primary" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>Ir al dashboard</button>
+    <FeatureDisabledState PropertyId="@PropertyId"
+                          FeatureName="Los reportes" />
 }
 else
 {

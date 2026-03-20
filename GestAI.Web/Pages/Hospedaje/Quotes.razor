@@ -12,8 +12,8 @@
 }
 else if (!_quotesEnabled)
 {
-    <EmptyState Title="Funcionalidad desactivada" Description="El cotizador está desactivado para este hospedaje." Icon="bi-toggle-off" />
-    <button class="btn btn-outline-primary" @onclick='() => Nav.NavigateTo($"/dashboard/{PropertyId}")'>Ir al dashboard</button>
+    <FeatureDisabledState PropertyId="@PropertyId"
+                          FeatureName="El cotizador" />
 }
 else
 {

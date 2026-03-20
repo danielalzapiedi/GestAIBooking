@@ -64,7 +64,7 @@
             <div class="calendar-toolbar">
                 <div>
                     <div class="calendar-title">@RangeTitle</div>
-                    <div class="calendar-subtitle">Vista continua por unidad. El check-in ocupa 3/4 del día y el check-out 1/4 para facilitar la lectura.</div>
+                    <div class="calendar-subtitle">Vista continua por unidad. El check-in ocupa 3/4 del día y el check-out 1/4 para facilitar la lectura. @CurrentStatusFilterLabel</div>
                 </div>
                 <div class="small text-muted">@FilteredUnits().Count() unidad(es) visibles · @_days día(s)</div>
             </div>
@@ -85,6 +85,12 @@
             }
             else
             {
+                <div class="summary-pill-grid mb-3">
+                    <div class="summary-pill"><div class="label">Reservas visibles</div><div class="value">@FilteredBookings().Count()</div></div>
+                    <div class="summary-pill"><div class="label">Bloqueos</div><div class="value">@_blocked.Count</div></div>
+                    <div class="summary-pill"><div class="label">Eventos externos</div><div class="value">@_externalEvents.Count</div></div>
+                </div>
+
                 <div class="calendar-timeline-modern">
                     <div class="resources">
                         <div class="resources-header">Unidades</div>
@@ -220,6 +226,9 @@
     private string _fromStr => _from.ToString("yyyy-MM-dd");
     private DateOnly _toExclusive => _from.AddDays(_days);
     private string RangeTitle => $"{_from:dd MMM yyyy} - {_toExclusive.AddDays(-1):dd MMM yyyy}";
+    private string CurrentStatusFilterLabel => string.IsNullOrWhiteSpace(_statusFilter)
+        ? "Mostrando todos los estados."
+        : $"Filtrado por estado: {StatusLabel(Enum.Parse<BookingStatus>(_statusFilter))}.";
 
     protected override async Task OnParametersSetAsync() => await Load();
 

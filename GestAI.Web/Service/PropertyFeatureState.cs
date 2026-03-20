@@ -54,7 +54,7 @@ public sealed class PropertyFeatureState
         if (CurrentPropertyId == propertyId && Current is not null)
             return selector(Current);
 
-        return true;
+        return false;
     }
 
     private void SetCurrent(int propertyId, PropertyFeatureSettingsDto settings, bool notify)
