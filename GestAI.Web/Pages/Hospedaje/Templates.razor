@@ -1,9 +1,12 @@
 @page "/templates/{PropertyId:int}"
 @using GestAI.Web.Dtos
 @inject ApiClient Api
+@inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject GestAI.Web.Service.PropertyFeatureState FeatureState
+
 <PageTitle>Templates</PageTitle>
+
 @if (!_featureChecked)
 {
     <EmptyState Title="Cargando configuración" Description="Estamos validando las funciones habilitadas para este hospedaje." Icon="bi-hourglass-split" />
@@ -15,21 +18,47 @@ else if (!_templatesEnabled)
 }
 else
 {
-    <h1 class="h3 mb-3">Plantillas</h1>
-    @if (_templates is null)
+    <div class="pagetitle d-flex justify-content-between align-items-center">
+        <div>
+            <h1>Plantillas</h1>
+            <p class="text-muted mb-0">Administrá mensajes reutilizables y mantené activas solo las versiones vigentes.</p>
+        </div>
+        <button class="btn btn-primary" @onclick="NewTemplate"><i class="bi bi-plus-circle me-1"></i>Nueva plantilla</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
     {
-        <p>Cargando...</p>
+        <div class="alert @(_success ? "alert-success" : "alert-danger")">@_message</div>
+    }
+
+    @if (!_loaded)
+    {
+        <EmptyState Title="Cargando plantillas" Description="Estamos trayendo el catálogo actual de mensajes." Icon="bi-chat-left-text" />
+    }
+    else if (_templates.Count == 0)
+    {
+        <EmptyState Title="No hay plantillas cargadas" Description="Creá la primera plantilla para reutilizar mensajes del hospedaje." Icon="bi-chat-square-text" />
     }
     else
     {
         <div class="row g-3">
-            @foreach (var t in _templates)
+            @foreach (var t in _templates.OrderBy(x => x.Type).ThenBy(x => x.Name))
             {
                 <div class="col-12 col-lg-6">
-                    <div class="card">
+                    <div class="card h-100">
                         <div class="card-body">
-                            <h5 class="card-title">@t.Type · @t.Name</h5>
-                            <pre class="small mb-0" style="white-space:pre-wrap">@t.Body</pre>
+                            <div class="d-flex justify-content-between align-items-start gap-2">
+                                <div>
+                                    <h5 class="card-title mb-1">@t.Name</h5>
+                                    <div class="small text-muted">@t.Type</div>
+                                </div>
+                                <StatusBadge Text="@(t.IsActive ? "Activa" : "Inactiva")" CssClass="@(t.IsActive ? "ui-badge ui-badge-success" : "ui-badge ui-badge-neutral")" />
+                            </div>
+                            <pre class="small mb-3" style="white-space:pre-wrap">@t.Body</pre>
+                            <div class="table-actions">
+                                <button class="btn btn-sm btn-outline-primary" @onclick="(() => EditTemplate(t))">Editar</button>
+                                <button class="btn btn-sm @(t.IsActive ? "btn-outline-warning" : "btn-outline-success")" @onclick="(() => ToggleStatus(t))">@(t.IsActive ? "Desactivar" : "Activar")</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -38,12 +67,68 @@ else
     }
 }
 
+@if (_showModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(_form.TemplateId is null ? "Nueva plantilla" : "Editar plantilla")</h5>
+                    <button type="button" class="btn-close" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (!string.IsNullOrWhiteSpace(_modalError))
+                    {
+                        <div class="alert alert-danger">@_modalError</div>
+                    }
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Tipo</label>
+                            <select class="form-select" @bind="_form.Type">
+                                @foreach (var type in Enum.GetValues<TemplateType>())
+                                {
+                                    <option value="@type">@type</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Estado</label>
+                            <select class="form-select" @bind="_form.IsActive">
+                                <option value="true">Activa</option>
+                                <option value="false">Inactiva</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Nombre</label>
+                            <input class="form-control" @bind="_form.Name" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Contenido</label>
+                            <textarea class="form-control" rows="8" @bind="_form.Body"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" @onclick="CloseModal">Cancelar</button>
+                    <button class="btn btn-primary" @onclick="SaveTemplate">Guardar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     [Parameter] public int PropertyId { get; set; }
 
-    private List<MessageTemplateDto>? _templates;
+    private readonly List<MessageTemplateDto> _templates = new();
+    private bool _loaded;
     private bool _featureChecked;
     private bool _templatesEnabled = true;
+    private bool _showModal;
+    private string? _message;
+    private bool _success;
+    private string? _modalError;
+    private TemplateFormVm _form = new();
 
     protected override async Task OnParametersSetAsync()
     {
@@ -52,8 +137,91 @@ else
         _featureChecked = true;
 
         if (_templatesEnabled)
+            await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loaded = false;
+        _templates.Clear();
+        _templates.AddRange((await Api.GetAsync<AppResult<List<MessageTemplateDto>>>($"api/properties/{PropertyId}/templates"))?.Data ?? []);
+        _loaded = true;
+    }
+
+    private void NewTemplate()
+    {
+        _modalError = null;
+        _form = new TemplateFormVm();
+        _showModal = true;
+    }
+
+    private void EditTemplate(MessageTemplateDto template)
+    {
+        _modalError = null;
+        _form = new TemplateFormVm
         {
-            _templates = (await Api.GetAsync<AppResult<List<MessageTemplateDto>>>($"api/properties/{PropertyId}/templates"))?.Data ?? new();
+            TemplateId = template.Id,
+            Type = template.Type,
+            Name = template.Name,
+            Body = template.Body,
+            IsActive = template.IsActive
+        };
+        _showModal = true;
+    }
+
+    private void CloseModal()
+    {
+        _showModal = false;
+        _modalError = null;
+    }
+
+    private async Task SaveTemplate()
+    {
+        _modalError = null;
+        if (string.IsNullOrWhiteSpace(_form.Name))
+        {
+            _modalError = "Ingresá un nombre para la plantilla.";
+            return;
         }
+
+        if (string.IsNullOrWhiteSpace(_form.Body))
+        {
+            _modalError = "Ingresá el contenido de la plantilla.";
+            return;
+        }
+
+        var response = await Api.PostAsync<UpsertTemplateCommand, AppResult<int>>($"api/properties/{PropertyId}/templates", new UpsertTemplateCommand(PropertyId, _form.TemplateId, _form.Type, _form.Name.Trim(), _form.Body.Trim(), _form.IsActive));
+        _success = response?.Success == true;
+        _message = _success ? "Plantilla guardada correctamente." : response?.Message ?? "No se pudo guardar la plantilla.";
+        if (!_success)
+        {
+            _modalError = _message;
+            return;
+        }
+
+        _showModal = false;
+        await LoadAsync();
+    }
+
+    private async Task ToggleStatus(MessageTemplateDto template)
+    {
+        var action = template.IsActive ? "desactivar" : "activar";
+        var confirmed = await JS.InvokeAsync<bool>("confirm", $"¿Querés {action} la plantilla '{template.Name}'?");
+        if (!confirmed)
+            return;
+
+        var response = await Api.PostAsync<object, AppResult>($"api/properties/{PropertyId}/templates/{template.Id}/status", new { isActive = !template.IsActive });
+        _success = response?.Success == true;
+        _message = _success ? "Estado de plantilla actualizado." : response?.Message ?? "No se pudo actualizar el estado.";
+        await LoadAsync();
+    }
+
+    private sealed class TemplateFormVm
+    {
+        public int? TemplateId { get; set; }
+        public TemplateType Type { get; set; } = TemplateType.Confirmation;
+        public string Name { get; set; } = string.Empty;
+        public string Body { get; set; } = string.Empty;
+        public bool IsActive { get; set; } = true;
     }
 }

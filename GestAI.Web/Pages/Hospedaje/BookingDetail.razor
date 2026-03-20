@@ -1,5 +1,6 @@
 @page "/bookings/{PropertyId:int}/{BookingId:int}"
 @inject ApiClient Api
+@inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject GestAI.Web.Service.PropertyFeatureState FeatureState
 @using GestAI.Web.Dtos
@@ -390,6 +391,11 @@ else
 
     private async Task DeletePayment(int paymentId)
     {
+        var payment = _payments?.FirstOrDefault(x => x.Id == paymentId);
+        var confirmed = await JS.InvokeAsync<bool>("confirm", $"¿Eliminar el pago de {(payment?.Amount ?? 0m):0.00}? Esta acción impacta el saldo pendiente de la reserva.");
+        if (!confirmed)
+            return;
+
         var result = await Api.DeleteAsync<AppResult>($"api/properties/{PropertyId}/bookings/{BookingId}/payments/{paymentId}");
         if (result?.Success != true) { _error = result?.Message ?? "No se pudo eliminar el pago."; return; }
         _message = "Pago eliminado.";

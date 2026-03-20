@@ -18,4 +18,10 @@ public sealed class OperationsController(IMediator mediator) : ControllerBase
     [HttpPost("tasks/{taskId:int}/complete")]
     public async Task<IActionResult> Complete(int propertyId, int taskId, CancellationToken ct)
         => Ok(await mediator.Send(new CompleteOperationalTaskCommand(propertyId, taskId), ct));
+
+    public sealed record UpdateTaskStatusBody(OperationalTaskStatus Status);
+
+    [HttpPost("tasks/{taskId:int}/status")]
+    public async Task<IActionResult> UpdateStatus(int propertyId, int taskId, [FromBody] UpdateTaskStatusBody body, CancellationToken ct)
+        => Ok(await mediator.Send(new UpdateOperationalTaskStatusCommand(propertyId, taskId, body.Status), ct));
 }

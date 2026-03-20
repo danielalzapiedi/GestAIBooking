@@ -17,29 +17,72 @@ public sealed class GetDashboardSummaryQueryHandler : IRequestHandler<GetDashboa
         var today = request.Today ?? DateOnly.FromDateTime(DateTime.Today);
         var monthStart = new DateOnly(today.Year, today.Month, 1);
         var nextMonth = monthStart.AddMonths(1);
+        var seriesStart = monthStart.AddMonths(-5);
         var unitsCount = await _db.Units.AsNoTracking().CountAsync(x => x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)) && x.IsActive, ct);
-        var monthBookings = await _db.Bookings.AsNoTracking().Where(x => x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)) && x.Status != BookingStatus.Cancelled)
-            .Where(x => x.CheckInDate < nextMonth && monthStart < x.CheckOutDate).ToListAsync(ct);
-        var occupiedNights = monthBookings.Sum(x => Math.Max(0, Math.Min(x.CheckOutDate.DayNumber, nextMonth.DayNumber) - Math.Max(x.CheckInDate.DayNumber, monthStart.DayNumber)));
+
+        var bookingsWindow = await _db.Bookings.AsNoTracking()
+            .Where(x => x.PropertyId == request.PropertyId
+                && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive))
+                && x.Status != BookingStatus.Cancelled
+                && x.CheckInDate < nextMonth
+                && seriesStart < x.CheckOutDate)
+            .Select(x => new
+            {
+                x.Id,
+                x.Status,
+                x.BookingCode,
+                x.CheckInDate,
+                x.CheckOutDate,
+                GuestName = x.Guest.FullName,
+                UnitName = x.Unit.Name,
+                Pending = x.TotalAmount - (x.Payments.Where(p => p.Status == PaymentStatus.Paid).Sum(p => (decimal?)p.Amount) ?? 0m)
+            })
+            .ToListAsync(ct);
+
+        var occupiedNights = bookingsWindow.Sum(x => Math.Max(0, Math.Min(x.CheckOutDate.DayNumber, nextMonth.DayNumber) - Math.Max(x.CheckInDate.DayNumber, monthStart.DayNumber)));
         var totalNights = unitsCount * (nextMonth.DayNumber - monthStart.DayNumber);
-        var monthPayments = await _db.Payments.AsNoTracking().Where(x => x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)) && x.Status == PaymentStatus.Paid && x.Date >= monthStart && x.Date < nextMonth).SumAsync(x => (decimal?)x.Amount, ct) ?? 0m;
-        var pendingBalance = await _db.Bookings.AsNoTracking().Where(x => x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)) && x.Status != BookingStatus.Cancelled)
-            .Select(x => x.TotalAmount - (x.Payments.Where(p => p.Status == PaymentStatus.Paid).Sum(p => (decimal?)p.Amount) ?? 0m)).SumAsync(ct);
-        var checkInsToday = await _db.Bookings.AsNoTracking().CountAsync(x => x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)) && x.CheckInDate == today && x.Status != BookingStatus.Cancelled, ct);
-        var checkOutsToday = await _db.Bookings.AsNoTracking().CountAsync(x => x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)) && x.CheckOutDate == today && x.Status != BookingStatus.Cancelled, ct);
-        var byStatusRaw = await _db.Bookings.AsNoTracking().Where(x => x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive))).GroupBy(x => x.Status).Select(g => new { Status = g.Key.ToString(), Count = g.Count() }).ToListAsync(ct);
-        var upcomingRaw = await _db.Bookings.AsNoTracking().Where(x => x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)) && x.CheckInDate >= today && x.Status != BookingStatus.Cancelled)
-            .OrderBy(x => x.CheckInDate).Take(8)
-            .Select(x => new { x.Id, x.BookingCode, GuestName = x.Guest.FullName, UnitName = x.Unit.Name, x.CheckInDate, x.CheckOutDate, Pending = x.TotalAmount - (x.Payments.Where(p => p.Status == PaymentStatus.Paid).Sum(p => (decimal?)p.Amount) ?? 0m) }).ToListAsync(ct);
+
+        var paidPaymentsWindow = await _db.Payments.AsNoTracking()
+            .Where(x => x.PropertyId == request.PropertyId
+                && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive))
+                && x.Status == PaymentStatus.Paid
+                && x.Date >= seriesStart
+                && x.Date < nextMonth)
+            .Select(x => new { x.Date, x.Amount })
+            .ToListAsync(ct);
+
+        var monthPayments = paidPaymentsWindow.Where(x => x.Date >= monthStart && x.Date < nextMonth).Sum(x => x.Amount);
+        var pendingBalance = await _db.Bookings.AsNoTracking()
+            .Where(x => x.PropertyId == request.PropertyId
+                && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive))
+                && x.Status != BookingStatus.Cancelled)
+            .Select(x => x.TotalAmount - (x.Payments.Where(p => p.Status == PaymentStatus.Paid).Sum(p => (decimal?)p.Amount) ?? 0m))
+            .SumAsync(ct);
+
+        var checkInsToday = bookingsWindow.Count(x => x.CheckInDate == today);
+        var checkOutsToday = bookingsWindow.Count(x => x.CheckOutDate == today);
+
+        var byStatusRaw = await _db.Bookings.AsNoTracking()
+            .Where(x => x.PropertyId == request.PropertyId
+                && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)))
+            .GroupBy(x => x.Status)
+            .Select(g => new { Status = g.Key.ToString(), Count = g.Count() })
+            .ToListAsync(ct);
+
+        var upcomingRaw = bookingsWindow
+            .Where(x => x.CheckInDate >= today)
+            .OrderBy(x => x.CheckInDate)
+            .Take(8)
+            .ToList();
+
         var incomeSeries = new List<DashboardMonthPointDto>();
         var occSeries = new List<DashboardMonthPointDto>();
         for (var i = 5; i >= 0; i--)
         {
             var ms = monthStart.AddMonths(-i);
             var me = ms.AddMonths(1);
-            var income = await _db.Payments.AsNoTracking().Where(x => x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)) && x.Status == PaymentStatus.Paid && x.Date >= ms && x.Date < me).SumAsync(x => (decimal?)x.Amount, ct) ?? 0m;
-            var occBookings = await _db.Bookings.AsNoTracking().Where(x => x.PropertyId == request.PropertyId && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)) && x.Status != BookingStatus.Cancelled)
-                .Where(x => x.CheckInDate < me && ms < x.CheckOutDate).ToListAsync(ct);
+            var income = paidPaymentsWindow.Where(x => x.Date >= ms && x.Date < me).Sum(x => x.Amount);
+            var occBookings = bookingsWindow.Where(x => x.CheckInDate < me && ms < x.CheckOutDate).ToList();
             var occNights = occBookings.Sum(x => Math.Max(0, Math.Min(x.CheckOutDate.DayNumber, me.DayNumber) - Math.Max(x.CheckInDate.DayNumber, ms.DayNumber)));
             var totNights = unitsCount * (me.DayNumber - ms.DayNumber);
             incomeSeries.Add(new DashboardMonthPointDto(ms.ToString("MMM yy"), income));

@@ -1,5 +1,6 @@
 @page "/bookings/grid/{PropertyId:int}"
 @inject ApiClient Api
+@inject IJSRuntime JS
 @inject NavigationManager Nav
 @using GestAI.Web.Dtos
 
@@ -144,6 +145,11 @@ else
 
     private async Task Cancel(int bookingId)
     {
+        var booking = (_bookings ?? []).FirstOrDefault(x => x.Id == bookingId);
+        var confirmed = await JS.InvokeAsync<bool>("confirm", $"¿Cancelar la reserva '{booking?.BookingCode ?? bookingId.ToString()}'? La acción la marcará como cancelada.");
+        if (!confirmed)
+            return;
+
         await Api.DeleteAsync<AppResult>($"api/properties/{PropertyId}/bookings/{bookingId}");
         await Load();
     }
