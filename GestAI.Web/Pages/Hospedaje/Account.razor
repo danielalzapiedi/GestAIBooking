@@ -16,7 +16,7 @@
 }
 else if (_summary is null)
 {
-    <EmptyState Title="No se pudo cargar la cuenta" Description="Reintentá en unos segundos para ver el resumen y la auditoría." Icon="bi-exclamation-triangle" />
+    <EmptyState Title="No se pudo cargar la cuenta" Description="@(_loadError ?? "Reintentá en unos segundos para ver el resumen y la auditoría.")" Icon="bi-exclamation-triangle" />
 }
 else
 {
@@ -25,6 +25,10 @@ else
             <div class="card h-100">
                 <div class="card-body">
                     <h5 class="card-title">Datos generales</h5>
+                    @if (!string.IsNullOrWhiteSpace(_loadError))
+                    {
+                        <div class="alert alert-warning">@_loadError</div>
+                    }
                     @if (!string.IsNullOrWhiteSpace(_saveError))
                     {
                         <div class="alert alert-danger">@_saveError</div>
@@ -151,6 +155,11 @@ else
                 <button class="btn btn-sm btn-outline-primary" @onclick="LoadAudit"><i class="bi bi-funnel"></i> Aplicar filtros</button>
             </div>
 
+            @if (!string.IsNullOrWhiteSpace(_auditError))
+            {
+                <div class="alert alert-danger">@_auditError</div>
+            }
+
             <div class="audit-filter-grid mb-3">
                 <div>
                     <label class="form-label">Entidad</label>
@@ -205,7 +214,9 @@ else
     private List<AccountPlanOptionDto> _planOptions = new();
     private string _name = string.Empty;
     private int? _selectedPlanId;
+    private string? _loadError;
     private string? _saveError;
+    private string? _auditError;
     private string? _auditEntityName;
     private string? _auditUserName;
     private DateOnly? _auditFrom = DateOnly.FromDateTime(DateTime.Today.AddDays(-30));
@@ -217,10 +228,24 @@ else
 
     private async Task LoadAsync()
     {
+        _loadError = null;
         var summary = await Api.GetAsync<AppResult<AccountSummaryDto>>("api/saas/account/summary");
         var plans = await Api.GetAsync<AppResult<List<AccountPlanOptionDto>>>("api/saas/account/plans");
-        _summary = summary?.Data;
-        _planOptions = plans?.Data ?? new();
+
+        if (summary?.Success != true)
+        {
+            _summary = null;
+            _planOptions = new();
+            _loadError = summary?.Message ?? "No se pudo cargar el resumen de la cuenta.";
+            _loaded = true;
+            return;
+        }
+
+        _summary = summary.Data;
+        _planOptions = plans?.Success == true ? plans.Data ?? new() : new();
+        if (plans?.Success == false)
+            _loadError = plans.Message ?? "No se pudieron cargar los planes disponibles.";
+
         _name = _summary?.Name ?? string.Empty;
         _selectedPlanId = _planOptions.FirstOrDefault(x => x.Code == _summary?.PlanCode)?.Id;
         await LoadAudit();
@@ -229,9 +254,17 @@ else
 
     private async Task LoadAudit()
     {
+        _auditError = null;
         var query = $"api/saas/account/audit?take=40{BuildAuditQuery()}";
         var audit = await Api.GetAsync<AppResult<List<AccountAuditItemDto>>>(query);
-        _audit = audit?.Data ?? new();
+        if (audit?.Success != true)
+        {
+            _audit = new();
+            _auditError = audit?.Message ?? "No se pudo cargar la auditoría de la cuenta.";
+            return;
+        }
+
+        _audit = audit.Data ?? new();
     }
 
     private string BuildAuditQuery()

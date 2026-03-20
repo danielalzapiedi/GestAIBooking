@@ -53,7 +53,7 @@ else
 }
 else if (_reports is null)
 {
-    <EmptyState Title="No se pudieron cargar los reportes" Description="Reintentá con otro período o actualizá la pantalla." Icon="bi-exclamation-triangle" />
+    <EmptyState Title="No se pudieron cargar los reportes" Description="@(_error ?? "Reintentá con otro período o actualizá la pantalla.")" Icon="bi-exclamation-triangle" />
 }
 else
 {
