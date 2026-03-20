@@ -83,8 +83,11 @@ builder.Services.AddScoped<IPropertyFeatureService, GestAI.Infrastructure.Saas.P
 var app = builder.Build();
 var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
 
-app.UseSwagger();
-app.UseSwaggerUI();
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 
 if (allowedOrigins.Length > 0)
 {

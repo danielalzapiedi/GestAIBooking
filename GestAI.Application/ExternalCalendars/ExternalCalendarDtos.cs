@@ -37,3 +37,8 @@ public sealed record ExternalSyncLogDto(
     int CancelledEvents,
     string? Message,
     DateTime CreatedAtUtc);
+
+public sealed record ExternalCalendarSyncConfigurationDto(
+    bool AutoSyncWorkerEnabled,
+    int IntervalMinutes,
+    int BatchSize);
