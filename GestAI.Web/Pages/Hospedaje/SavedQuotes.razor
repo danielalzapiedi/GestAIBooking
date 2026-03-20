@@ -25,9 +25,15 @@ else
     <button class="btn btn-outline-secondary" @onclick='() => Nav.NavigateTo($"/quotes/{PropertyId}")'>Volver al cotizador</button>
 </div>
 
+<div class="summary-pill-grid mb-3">
+    <div class="summary-pill"><div class="label">Cotizaciones</div><div class="value">@_items.Count</div></div>
+    <div class="summary-pill"><div class="label">Convertidas</div><div class="value">@_items.Count(x => x.Status == SavedQuoteStatus.Converted)</div></div>
+    <div class="summary-pill"><div class="label">Pendientes</div><div class="value">@_items.Count(x => x.Status is SavedQuoteStatus.Draft or SavedQuoteStatus.Saved)</div></div>
+</div>
+
 <div class="card mb-3"><div class="card-body pt-3"><div class="row g-2">
     <div class="col-md-6"><input class="form-control" placeholder="Buscar por huésped, email o token" @bind="_search" /></div>
-    <div class="col-md-3"><select class="form-select" @bind="_status"><option value="">Todos los estados</option>@foreach (var st in Enum.GetValues<SavedQuoteStatus>()){<option value="@st">@st</option>}</select></div>
+    <div class="col-md-3"><select class="form-select" @bind="_status"><option value="">Todos los estados</option>@foreach (var st in Enum.GetValues<SavedQuoteStatus>()){<option value="@st">@SavedQuoteStatusLabel(st)</option>}</select></div>
     <div class="col-md-3"><button class="btn btn-primary w-100" @onclick="Load">Buscar</button></div>
 </div></div></div>
 
@@ -57,9 +63,9 @@ else
                     <td>@item.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
                     <td><strong>@(item.GuestName ?? "Sin nombre")</strong><div class="small text-muted">@(item.GuestEmail ?? item.PublicToken)</div></td>
                     <td>@(item.UnitName ?? "Sin unidad")</td>
-                    <td>@item.CheckInDate.ToString("dd/MM") - @item.CheckOutDate.ToString("dd/MM")<div class="small text-muted">@item.Adults adult. · @item.Children niños</div></td>
+                    <td>@item.CheckInDate.ToString("dd/MM") - @item.CheckOutDate.ToString("dd/MM")<div class="small text-muted">@GuestBreakdown(item.Adults, item.Children)</div></td>
                     <td><strong>@item.TotalAmount.ToString("0.00")</strong><div class="small text-success">Seña @item.SuggestedDepositAmount.ToString("0.00")</div></td>
-                    <td><StatusBadge Text="@item.Status.ToString()" CssClass="@(item.Status == SavedQuoteStatus.Converted ? "ui-badge ui-badge-success" : "ui-badge ui-badge-neutral")" /></td>
+                    <td><StatusBadge Text="@SavedQuoteStatusLabel(item.Status)" CssClass="@SavedQuoteStatusBadge(item.Status)" /></td>
                     <td class="text-end">
                         <button class="btn btn-sm btn-outline-primary me-1" @onclick="(() => Select(item))">Ver</button>
                         @if (item.Status != SavedQuoteStatus.Converted)
@@ -82,7 +88,13 @@ else
 @if (_selected is not null)
 {
     <div class="card mt-3"><div class="card-body">
-        <h5 class="card-title">Detalle de cotización</h5>
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+            <div>
+                <h5 class="card-title mb-1">Detalle de cotización</h5>
+                <div class="small text-muted">Token público: @_selected.PublicToken</div>
+            </div>
+            <StatusBadge Text="@SavedQuoteStatusLabel(_selected.Status)" CssClass="@SavedQuoteStatusBadge(_selected.Status)" />
+        </div>
         <div class="row g-3">
             <div class="col-md-3"><div class="small text-muted">Unidad</div><div class="fw-bold">@(_selected.UnitName ?? "-")</div></div>
             <div class="col-md-3"><div class="small text-muted">Tarifa base</div><div class="fw-bold">@_selected.BaseAmount.ToString("0.00")</div></div>
@@ -328,5 +340,31 @@ else
 
         CloseConvertModal();
         await Load();
+    }
+
+    private static string SavedQuoteStatusLabel(SavedQuoteStatus status) => status switch
+    {
+        SavedQuoteStatus.Draft => "Borrador",
+        SavedQuoteStatus.Saved => "Guardada",
+        SavedQuoteStatus.Converted => "Convertida",
+        SavedQuoteStatus.Expired => "Vencida",
+        SavedQuoteStatus.Cancelled => "Cancelada",
+        _ => status.ToString()
+    };
+
+    private static string SavedQuoteStatusBadge(SavedQuoteStatus status) => status switch
+    {
+        SavedQuoteStatus.Converted => "ui-badge ui-badge-success",
+        SavedQuoteStatus.Draft or SavedQuoteStatus.Saved => "ui-badge ui-badge-warning",
+        SavedQuoteStatus.Expired => "ui-badge ui-badge-info",
+        SavedQuoteStatus.Cancelled => "ui-badge ui-badge-neutral",
+        _ => "ui-badge ui-badge-neutral"
+    };
+
+    private static string GuestBreakdown(int adults, int children)
+    {
+        var adultLabel = adults == 1 ? "adulto" : "adultos";
+        var childLabel = children == 1 ? "niño" : "niños";
+        return $"{adults} {adultLabel} · {children} {childLabel}";
     }
 }
