@@ -6,12 +6,12 @@ using GestAI.Application;
 using GestAI.Application.Abstractions;
 using GestAI.Application.Behaviors;
 using GestAI.Application.Mapping;
-using GestAI.Application.Security;
 using GestAI.Domain.Entities;
 using GestAI.Infrastructure;
 using GestAI.Infrastructure.Identity;
 using GestAI.Infrastructure.Payments;
 using GestAI.Infrastructure.Persistence;
+using GestAI.Infrastructure.Security;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using System.Text.Json;
@@ -83,8 +83,11 @@ builder.Services.AddScoped<IPropertyFeatureService, GestAI.Infrastructure.Saas.P
 var app = builder.Build();
 var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
 
-app.UseSwagger();
-app.UseSwaggerUI();
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 
 if (allowedOrigins.Length > 0)
 {
