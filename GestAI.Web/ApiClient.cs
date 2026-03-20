@@ -25,10 +25,10 @@ public sealed class ApiClient
         => (url ?? string.Empty).TrimStart('/');
 
     public async Task<T?> GetAsync<T>(string url, CancellationToken ct = default)
-        => await SendAsync(() => _http.GetAsync(Normalize(url), ct), ct);
+        => await SendAsync<T>(() => _http.GetAsync(Normalize(url), ct), ct);
 
     public async Task<TResponse?> PostAsync<TRequest, TResponse>(string url, TRequest body, CancellationToken ct = default)
-        => await SendAsync(() => _http.PostAsJsonAsync(Normalize(url), body, ct), ct);
+        => await SendAsync<TResponse>(() => _http.PostAsJsonAsync(Normalize(url), body, ct), ct);
 
     public async Task PostAsync<TRequest>(string url, TRequest body, CancellationToken ct = default)
     {
@@ -44,7 +44,7 @@ public sealed class ApiClient
     }
 
     public async Task<TResponse?> PutAsync<TRequest, TResponse>(string url, TRequest body, CancellationToken ct = default)
-        => await SendAsync(() => _http.PutAsJsonAsync(Normalize(url), body, ct), ct);
+        => await SendAsync<TResponse>(() => _http.PutAsJsonAsync(Normalize(url), body, ct), ct);
 
     public async Task DeleteAsync(string url, CancellationToken ct = default)
     {

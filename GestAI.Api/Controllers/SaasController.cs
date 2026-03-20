@@ -16,6 +16,9 @@ public sealed class SaasController(IMediator mediator) : ControllerBase
     [HttpGet("account/summary")]
     public async Task<IActionResult> GetAccountSummary(CancellationToken ct) => Ok(await mediator.Send(new GetAccountSummaryQuery(), ct));
 
+    [HttpGet("account/plans")]
+    public async Task<IActionResult> GetAccountPlans(CancellationToken ct) => Ok(await mediator.Send(new GetAccountPlanOptionsQuery(), ct));
+
     [HttpPut("account")]
     public async Task<IActionResult> UpdateAccount([FromBody] UpdateAccountCommand command, CancellationToken ct) => Ok(await mediator.Send(command, ct));
 

@@ -35,8 +35,9 @@ public sealed record ModuleAccessDto(SaasModule Module, bool Allowed);
 public sealed record CurrentUserAccessDto(int? AccountId, int? DefaultPropertyId, InternalUserRole? Role, bool IsOwner, bool IsActive, List<ModuleAccessDto> Modules);
 public sealed record PropertyUsageItemDto(int Id, string Name, bool IsActive, int UnitsCount);
 public sealed record AccountSummaryDto(int AccountId, string Name, bool IsActive, DateTime CreatedAtUtc, string PlanName, SaasPlanCode PlanCode, string PlanStatus, DateTime StartedAtUtc, int MaxProperties, int MaxUnits, int MaxUsers, bool IncludesReports, bool IncludesOperations, int CurrentProperties, int CurrentUnits, int CurrentUsers, List<PropertyUsageItemDto> Properties);
+public sealed record AccountPlanOptionDto(int Id, SaasPlanCode Code, string Name, int MaxProperties, int MaxUnits, int MaxUsers, bool IncludesReports, bool IncludesOperations, bool IncludesPublicPortal);
 public sealed record UpdateAccountCommand(string Name, int? PlanDefinitionId);
-public sealed record AccountUserListItemDto(string UserId, string DisplayName, string Email, bool IsActive, InternalUserRole Role, int? DefaultPropertyId, string? DefaultPropertyName, DateTime? LastLoginAtUtc, DateTime InvitedAtUtc);
+public sealed record AccountUserListItemDto(string UserId, string Nombre, string Apellido, string DisplayName, string Email, bool IsActive, InternalUserRole Role, int? DefaultPropertyId, string? DefaultPropertyName, DateTime? LastLoginAtUtc, DateTime InvitedAtUtc);
 public sealed class UpsertAccountUserCommand
 {
     public string? UserId { get; set; }

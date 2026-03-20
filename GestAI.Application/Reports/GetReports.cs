@@ -6,7 +6,18 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GestAI.Application.Reports;
 
-public sealed record GetReportsQuery(int PropertyId, DateOnly From, DateOnly ToExclusive, int Year, int Month) : IRequest<AppResult<ReportsDto>>;
+public sealed record GetReportsQuery(int PropertyId, DateOnly From, DateOnly ToExclusive) : IRequest<AppResult<ReportsDto>>;
+
+public sealed class GetReportsQueryValidator : FluentValidation.AbstractValidator<GetReportsQuery>
+{
+    public GetReportsQueryValidator()
+    {
+        RuleFor(x => x.PropertyId).GreaterThan(0);
+        RuleFor(x => x.ToExclusive)
+            .Must((query, toExclusive) => toExclusive > query.From)
+            .WithMessage("El rango de fechas no es válido.");
+    }
+}
 
 public sealed class GetReportsQueryHandler : IRequestHandler<GetReportsQuery, AppResult<ReportsDto>>
 {
@@ -45,7 +56,7 @@ public sealed class GetReportsQueryHandler : IRequestHandler<GetReportsQuery, Ap
         var paidIncome = await _db.Payments.AsNoTracking()
             .Where(p => p.PropertyId == request.PropertyId && (p.Property.Account.OwnerUserId == _current.UserId || p.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)))
             .Where(p => p.Status == PaymentStatus.Paid)
-            .Where(p => p.Date.Year == request.Year && p.Date.Month == request.Month)
+            .Where(p => request.From <= p.Date && p.Date < request.ToExclusive)
             .SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
 
         var periodBookings = await _db.Bookings.AsNoTracking()
@@ -89,7 +100,7 @@ public sealed class GetReportsQueryHandler : IRequestHandler<GetReportsQuery, Ap
         var depositsPending = nonCancelled.Sum(b => Math.Max(0m, b.ExpectedDepositAmount - b.PaidAmount));
 
         var occupancy = new OccupancyReportDto(request.From, request.ToExclusive, totalNightsAvailable, nightsOccupied, occPct, avgStay);
-        var income = new IncomeReportDto(request.Year, request.Month, paidIncome, depositsCollected, depositsPending, avgIncomePerNight);
+        var income = new IncomeReportDto(request.From, request.ToExclusive, paidIncome, depositsCollected, depositsPending, avgIncomePerNight);
 
         var byStatus = periodBookings
             .GroupBy(x => x.Status)

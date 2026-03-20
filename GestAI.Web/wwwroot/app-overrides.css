@@ -914,3 +914,65 @@ textarea.form-control {
         font-size: 1.5rem;
     }
 }
+
+
+.plan-option-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+}
+
+.plan-option-card {
+    width: 100%;
+    border: 1px solid #e8edf3;
+    border-radius: 20px;
+    background: linear-gradient(180deg, #fff 0%, #fcfdff 100%);
+    padding: 1rem;
+    text-align: left;
+    transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+
+.plan-option-card:hover {
+    border-color: #f2b7c7;
+    box-shadow: 0 12px 24px rgba(16, 24, 40, 0.08);
+    transform: translateY(-1px);
+}
+
+.plan-option-card.selected {
+    border-color: #d63384;
+    box-shadow: 0 0 0 3px rgba(214, 51, 132, 0.12);
+}
+
+.summary-pill-grid.compact {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.plan-feature-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .75rem 1rem;
+}
+
+.plan-feature-list span {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+}
+
+.plan-feature-list .enabled {
+    color: #157347;
+}
+
+.plan-feature-list .disabled {
+    color: #b02a37;
+}
+
+.account-save-button {
+    width: 100%;
+}
+
+@media (min-width: 992px) {
+    .account-save-button {
+        width: auto;
+    }
+}

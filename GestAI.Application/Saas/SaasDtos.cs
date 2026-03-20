@@ -33,10 +33,23 @@ public sealed record AccountSummaryDto(
 
 public sealed record PropertyUsageItemDto(int Id, string Name, bool IsActive, int UnitsCount);
 
+public sealed record AccountPlanOptionDto(
+    int Id,
+    SaasPlanCode Code,
+    string Name,
+    int MaxProperties,
+    int MaxUnits,
+    int MaxUsers,
+    bool IncludesReports,
+    bool IncludesOperations,
+    bool IncludesPublicPortal);
+
 public sealed record UpdateAccountCommand(string Name, int? PlanDefinitionId) : MediatR.IRequest<GestAI.Application.Common.AppResult>;
 
 public sealed record AccountUserListItemDto(
     string UserId,
+    string Nombre,
+    string Apellido,
     string DisplayName,
     string Email,
     bool IsActive,
@@ -61,6 +74,7 @@ public sealed record ToggleAccountUserStatusCommand(string UserId, bool IsActive
 public sealed record GetAccountUsersQuery : MediatR.IRequest<GestAI.Application.Common.AppResult<List<AccountUserListItemDto>>>;
 public sealed record GetCurrentUserAccessQuery : MediatR.IRequest<GestAI.Application.Common.AppResult<CurrentUserAccessDto>>;
 public sealed record GetAccountSummaryQuery : MediatR.IRequest<GestAI.Application.Common.AppResult<AccountSummaryDto>>;
+public sealed record GetAccountPlanOptionsQuery : MediatR.IRequest<GestAI.Application.Common.AppResult<List<AccountPlanOptionDto>>>;
 public sealed record GetAccountAuditQuery(int Take = 30, string? EntityName = null, string? UserName = null, DateOnly? From = null, DateOnly? To = null) : MediatR.IRequest<GestAI.Application.Common.AppResult<List<AccountAuditItemDto>>>;
 
 public sealed record AccountAuditItemDto(DateTime CreatedAtUtc, string EntityName, string Action, string Summary, string? UserName);
