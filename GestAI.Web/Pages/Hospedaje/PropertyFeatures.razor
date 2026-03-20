@@ -6,92 +6,143 @@
 
 <PageTitle>Configuración funcional</PageTitle>
 
-<div class="pagetitle d-flex justify-content-between align-items-center">
+<div class="pagetitle d-flex justify-content-between align-items-center flex-wrap gap-2">
     <div>
         <h1>Configuración funcional</h1>
         <p class="text-muted mb-0">Activá o desactivá features del hospedaje sin romper dependencias con el plan contratado.</p>
     </div>
-    <button class="btn btn-primary" @onclick="Save">Guardar cambios</button>
+    <button class="btn btn-primary" @onclick="Save" disabled="@(!CanSave)">Guardar cambios</button>
 </div>
 
-@if (_settings is null)
+@if (!_loaded)
 {
-    <p>Cargando...</p>
+    <EmptyState Title="Cargando configuración funcional" Description="Estamos consultando permisos, plan y estado actual del hospedaje." Icon="bi-sliders" />
+}
+else if (_settings is null)
+{
+    <EmptyState Title="No pudimos cargar la configuración" Description="Reintentá en unos segundos para volver a obtener las funciones del hospedaje." Icon="bi-exclamation-triangle">
+        <button class="btn btn-outline-primary" @onclick="ReloadAsync">Reintentar</button>
+    </EmptyState>
 }
 else
 {
     @if (!string.IsNullOrWhiteSpace(_message))
     {
-        <div class="alert alert-info">@_message</div>
+        <div class="alert @(IsErrorMessage ? "alert-danger" : "alert-info")">@_message</div>
     }
 
-    @foreach (var group in Groups)
+    @if (!CanManageConfiguration)
     {
-        <div class="card mb-3">
-            <div class="card-body">
-                <h5 class="card-title">@group.Title</h5>
-                @foreach (var item in group.Items)
-                {
-                    <div class="form-check form-switch mb-2">
-                        <input class="form-check-input" type="checkbox" checked="@item.Getter()" disabled="@item.Disabled" @onchange="e => item.Setter((bool)e.Value!)" />
-                        <label class="form-check-label fw-semibold">@item.Label</label>
-                        <div class="small text-muted">@item.Description</div>
-                        @if (!string.IsNullOrWhiteSpace(item.Helper))
-                        {
-                            <div class="small text-secondary">@item.Helper</div>
-                        }
-                    </div>
-                }
-            </div>
+        <div class="alert alert-warning">
+            Podés visualizar la configuración funcional, pero no modificarla porque tu rol o plan actual no tienen acceso al módulo de configuración.
         </div>
     }
+
+    @if (UnavailableModules.Count > 0)
+    {
+        <div class="alert alert-secondary">
+            <div class="fw-semibold mb-1">Funciones condicionadas por plan o módulo</div>
+            <div class="small text-muted">Estas funciones no se pueden activar desde esta cuenta hasta habilitar el módulo correspondiente.</div>
+            <ul class="mb-0 mt-2 small">
+                @foreach (var item in UnavailableModules)
+                {
+                    <li><strong>@item.FeatureLabel</strong>: requiere el módulo @item.ModuleLabel.</li>
+                }
+            </ul>
+        </div>
+    }
+
+    <div class="row g-3">
+        @foreach (var group in Groups)
+        {
+            <div class="col-12 col-xl-6">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                            <div>
+                                <h5 class="card-title mb-1">@group.Title</h5>
+                                <div class="small text-muted">@group.Description</div>
+                            </div>
+                            <span class="ui-badge ui-badge-neutral">@group.EnabledCount/@group.Items.Count activas</span>
+                        </div>
+
+                        @foreach (var item in group.Items)
+                        {
+                            <div class="form-check form-switch mb-3 pb-2 border-bottom">
+                                <input class="form-check-input" type="checkbox" checked="@item.Getter()" disabled="@(item.Disabled || !CanManageConfiguration)" @onchange="e => item.Setter((bool)e.Value!)" />
+                                <label class="form-check-label fw-semibold">@item.Label</label>
+                                <div class="small text-muted">@item.Description</div>
+                                @if (!string.IsNullOrWhiteSpace(item.Helper))
+                                {
+                                    <div class="small text-secondary mt-1">@item.Helper</div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
 }
 
 @code {
     [Parameter] public int PropertyId { get; set; }
+    private bool _loaded;
     private PropertyFeatureSettingsDto? _settings;
     private CurrentUserAccessDto? _access;
     private string? _message;
 
-    protected override async Task OnParametersSetAsync()
+    private bool CanManageConfiguration => HasModule(SaasModule.Configuration);
+    private bool CanSave => _settings is not null && CanManageConfiguration;
+    private bool IsErrorMessage => !string.IsNullOrWhiteSpace(_message) && _message.Contains("no se pudo", StringComparison.OrdinalIgnoreCase);
+    private List<PropertyFeatureModuleAvailabilityDto> UnavailableModules => _settings?.ModuleAvailability?.Where(x => !x.AvailableByPlan).ToList() ?? [];
+
+    protected override async Task OnParametersSetAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
     {
-        _settings = await FeatureState.EnsureAsync(PropertyId);
+        _loaded = false;
+        _message = null;
+
+        _settings = await FeatureState.RefreshAsync(PropertyId);
         var access = await Api.GetAsync<AppResult<CurrentUserAccessDto>>("api/saas/me/access");
         _access = access?.Success == true ? access.Data : null;
+
+        _loaded = true;
     }
 
-    private IReadOnlyList<(string Title, List<(string Label, string Description, string? Helper, bool Disabled, Func<bool> Getter, Action<bool> Setter)> Items)> Groups
+    private IReadOnlyList<FeatureGroupVm> Groups
         => _settings is null
             ? []
             :
             [
-                ("Operación", new List<(string, string, string?, bool, Func<bool>, Action<bool>)>
+                new FeatureGroupVm("Operación", "Funciones para coordinar el día a día del hospedaje.", new List<FeatureToggleVm>
                 {
-                    ("Mostrar módulo de limpieza", "Incluye tablero y tareas de housekeeping.", GetModuleHelper(nameof(PropertyFeatureSettingsDto.EnableHousekeeping)), IsModuleGovernedFeatureDisabled(nameof(PropertyFeatureSettingsDto.EnableHousekeeping)), () => _settings.EnableHousekeeping, v => _settings.EnableHousekeeping = v),
-                    ("Mostrar agenda operativa", "Vista diaria de check-ins y check-outs.", null, false, () => _settings.EnableAgenda, v => _settings.EnableAgenda = v),
-                    ("Usar modo simple de huéspedes", "Simplifica formularios y prioriza datos mínimos.", null, false, () => _settings.UseSimpleGuestMode, v => _settings.UseSimpleGuestMode = v)
+                    new("Mostrar módulo de limpieza", "Incluye tablero y tareas de housekeeping.", GetModuleHelper(nameof(PropertyFeatureSettingsDto.EnableHousekeeping)), IsModuleGovernedFeatureDisabled(nameof(PropertyFeatureSettingsDto.EnableHousekeeping)), () => _settings.EnableHousekeeping, v => _settings.EnableHousekeeping = v),
+                    new("Mostrar agenda operativa", "Vista diaria de check-ins y check-outs.", null, false, () => _settings.EnableAgenda, v => _settings.EnableAgenda = v),
+                    new("Usar modo simple de huéspedes", "Simplifica formularios y prioriza datos mínimos.", null, false, () => _settings.UseSimpleGuestMode, v => _settings.UseSimpleGuestMode = v)
                 }),
-                ("Comercial", new List<(string, string, string?, bool, Func<bool>, Action<bool>)>
+                new FeatureGroupVm("Comercial", "Herramientas para vender, cotizar y ajustar la propuesta comercial.", new List<FeatureToggleVm>
                 {
-                    ("Mostrar cotizador", "Cotización comercial por estadía.", null, false, () => _settings.EnableQuotes, OnQuotesChanged),
-                    ("Permitir cotizaciones guardadas", "Guardar propuestas y convertir a reserva.", _settings.EnableQuotes ? null : "Requiere mantener activo el cotizador.", !_settings.EnableQuotes, () => _settings.EnableSavedQuotes, v => _settings.EnableSavedQuotes = v),
-                    ("Aplicar promociones", "Descuentos y reglas comerciales.", GetModuleHelper(nameof(PropertyFeatureSettingsDto.EnablePromotions)), IsModuleGovernedFeatureDisabled(nameof(PropertyFeatureSettingsDto.EnablePromotions)), () => _settings.EnablePromotions, v => _settings.EnablePromotions = v),
-                    ("Usar tarifas avanzadas", "Temporadas y rangos específicos por fecha.", GetModuleHelper(nameof(PropertyFeatureSettingsDto.EnableAdvancedRates)), IsModuleGovernedFeatureDisabled(nameof(PropertyFeatureSettingsDto.EnableAdvancedRates)), () => _settings.EnableAdvancedRates, v => _settings.EnableAdvancedRates = v),
-                    ("Habilitar venta directa", "Flujos públicos de reserva directa.", null, false, () => _settings.EnableDirectBooking, v => _settings.EnableDirectBooking = v)
+                    new("Mostrar cotizador", "Cotización comercial por estadía.", null, false, () => _settings.EnableQuotes, OnQuotesChanged),
+                    new("Permitir cotizaciones guardadas", "Guardar propuestas y convertir a reserva.", _settings.EnableQuotes ? null : "Requiere mantener activo el cotizador.", !_settings.EnableQuotes, () => _settings.EnableSavedQuotes, v => _settings.EnableSavedQuotes = v),
+                    new("Aplicar promociones", "Descuentos y reglas comerciales.", GetModuleHelper(nameof(PropertyFeatureSettingsDto.EnablePromotions)), IsModuleGovernedFeatureDisabled(nameof(PropertyFeatureSettingsDto.EnablePromotions)), () => _settings.EnablePromotions, v => _settings.EnablePromotions = v),
+                    new("Usar tarifas avanzadas", "Temporadas y rangos específicos por fecha.", GetModuleHelper(nameof(PropertyFeatureSettingsDto.EnableAdvancedRates)), IsModuleGovernedFeatureDisabled(nameof(PropertyFeatureSettingsDto.EnableAdvancedRates)), () => _settings.EnableAdvancedRates, v => _settings.EnableAdvancedRates = v),
+                    new("Habilitar venta directa", "Flujos públicos de reserva directa.", null, false, () => _settings.EnableDirectBooking, v => _settings.EnableDirectBooking = v)
                 }),
-                ("Finanzas", new List<(string, string, string?, bool, Func<bool>, Action<bool>)>
+                new FeatureGroupVm("Finanzas", "Controles de cobro y seguimiento económico.", new List<FeatureToggleVm>
                 {
-                    ("Permitir registrar pagos", "Módulo de cobros y saldo.", GetModuleHelper(nameof(PropertyFeatureSettingsDto.EnablePayments)), IsModuleGovernedFeatureDisabled(nameof(PropertyFeatureSettingsDto.EnablePayments)), () => _settings.EnablePayments, v => _settings.EnablePayments = v)
+                    new("Permitir registrar pagos", "Módulo de cobros y saldo.", GetModuleHelper(nameof(PropertyFeatureSettingsDto.EnablePayments)), IsModuleGovernedFeatureDisabled(nameof(PropertyFeatureSettingsDto.EnablePayments)), () => _settings.EnablePayments, v => _settings.EnablePayments = v)
                 }),
-                ("Distribución", new List<(string, string, string?, bool, Func<bool>, Action<bool>)>
+                new FeatureGroupVm("Distribución", "Capacidades para sincronizar disponibilidad con canales externos.", new List<FeatureToggleVm>
                 {
-                    ("Sincronizar calendarios externos", "Conexiones OTA e importación iCal.", null, false, () => _settings.EnableExternalCalendarSync, v => _settings.EnableExternalCalendarSync = v)
+                    new("Sincronizar calendarios externos", "Conexiones OTA e importación iCal.", null, false, () => _settings.EnableExternalCalendarSync, v => _settings.EnableExternalCalendarSync = v)
                 }),
-                ("Gestión", new List<(string, string, string?, bool, Func<bool>, Action<bool>)>
+                new FeatureGroupVm("Gestión", "Visibilidad analítica, plantillas y trazabilidad del hospedaje.", new List<FeatureToggleVm>
                 {
-                    ("Mostrar reportes", "Métricas de ocupación e ingresos.", GetModuleHelper(nameof(PropertyFeatureSettingsDto.EnableReports)), IsModuleGovernedFeatureDisabled(nameof(PropertyFeatureSettingsDto.EnableReports)), () => _settings.EnableReports, v => _settings.EnableReports = v),
-                    ("Usar plantillas", "Mensajes predefinidos para operación.", null, false, () => _settings.EnableTemplates, v => _settings.EnableTemplates = v),
-                    ("Mostrar vista de auditoría", "Consulta visual de eventos auditados.", null, false, () => _settings.EnableAuditView, v => _settings.EnableAuditView = v)
+                    new("Mostrar reportes", "Métricas de ocupación e ingresos.", GetModuleHelper(nameof(PropertyFeatureSettingsDto.EnableReports)), IsModuleGovernedFeatureDisabled(nameof(PropertyFeatureSettingsDto.EnableReports)), () => _settings.EnableReports, v => _settings.EnableReports = v),
+                    new("Usar plantillas", "Mensajes predefinidos para operación.", null, false, () => _settings.EnableTemplates, v => _settings.EnableTemplates = v),
+                    new("Mostrar vista de auditoría", "Consulta visual de eventos auditados.", null, false, () => _settings.EnableAuditView, v => _settings.EnableAuditView = v)
                 })
             ];
 
@@ -113,30 +164,19 @@ else
 
     private string? GetModuleHelper(string featureKey)
     {
-        var requiredModule = PropertyFeatureModulePolicy.GetRequiredModule(featureKey);
-        if (!requiredModule.HasValue || HasModule(requiredModule.Value))
+        var availability = _settings?.ModuleAvailability?.FirstOrDefault(x => x.FeatureKey == featureKey);
+        if (availability is null || availability.AvailableByPlan)
             return null;
 
-        return $"Requiere acceso habilitado al módulo {GetModuleLabel(requiredModule.Value)} para esta cuenta.";
+        return $"Requiere acceso habilitado al módulo {availability.ModuleLabel} para esta cuenta.";
     }
 
     private bool HasModule(SaasModule module)
         => _access?.Modules?.Any(x => x.Module == module && x.Allowed) ?? false;
 
-    private static string GetModuleLabel(SaasModule module)
-        => module switch
-        {
-            SaasModule.Rates => "Tarifas",
-            SaasModule.Promotions => "Promociones",
-            SaasModule.Payments => "Pagos",
-            SaasModule.Housekeeping => "Housekeeping",
-            SaasModule.Reports => "Reportes",
-            _ => module.ToString()
-        };
-
     private async Task Save()
     {
-        if (_settings is null)
+        if (_settings is null || !CanManageConfiguration)
             return;
 
         var cmd = new UpdatePropertyFeatureSettingsCommand(
@@ -167,4 +207,11 @@ else
             _message = res?.Message ?? "No se pudo guardar la configuración.";
         }
     }
+
+    private sealed record FeatureGroupVm(string Title, string Description, List<FeatureToggleVm> Items)
+    {
+        public int EnabledCount => Items.Count(x => x.Getter());
+    }
+
+    private sealed record FeatureToggleVm(string Label, string Description, string? Helper, bool Disabled, Func<bool> Getter, Action<bool> Setter);
 }

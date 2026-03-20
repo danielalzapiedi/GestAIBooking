@@ -144,9 +144,15 @@
                         <i class="bi bi-chevron-down ms-auto"></i>
                     </button>
                     <ul class="nav-content collapse @(IsGroupOpen("operacion") ? "show" : "")">
-                        <li><NavLink class="sidebar-sub-link" href="@DashboardHref" Match="NavLinkMatch.Prefix"><i class="bi bi-grid"></i><span>Dashboard</span></NavLink></li>
-                        <li><NavLink class="sidebar-sub-link" href="@CalendarTimelineHref" Match="NavLinkMatch.Prefix"><i class="bi bi-calendar3"></i><span>Calendario</span></NavLink></li>
-                        <li><NavLink class="sidebar-sub-link" href="@BookingsListHref" Match="NavLinkMatch.Prefix"><i class="bi bi-journal-bookmark"></i><span>Reservas</span></NavLink></li>
+                        @if (HasModule(SaasModule.Dashboard))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@DashboardHref" Match="NavLinkMatch.Prefix"><i class="bi bi-grid"></i><span>Dashboard</span></NavLink></li>
+                            <li><NavLink class="sidebar-sub-link" href="@CalendarTimelineHref" Match="NavLinkMatch.Prefix"><i class="bi bi-calendar3"></i><span>Calendario</span></NavLink></li>
+                        }
+                        @if (HasModule(SaasModule.Bookings))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@BookingsListHref" Match="NavLinkMatch.Prefix"><i class="bi bi-journal-bookmark"></i><span>Reservas</span></NavLink></li>
+                        }
                         @if (IsFeatureEnabled(x => x.EnableAgenda))
                         {
                             <li><NavLink class="sidebar-sub-link" href="@AgendaHref" Match="NavLinkMatch.Prefix"><i class="bi bi-clock-history"></i><span>Agenda</span></NavLink></li>
@@ -155,7 +161,10 @@
                         {
                             <li><NavLink class="sidebar-sub-link" href="@HousekeepingHref" Match="NavLinkMatch.Prefix"><i class="bi bi-brush"></i><span>Limpieza</span></NavLink></li>
                         }
-                        <li><NavLink class="sidebar-sub-link" href="@GuestsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-people"></i><span>Huéspedes</span></NavLink></li>
+                        @if (HasModule(SaasModule.Guests))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@GuestsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-people"></i><span>Huéspedes</span></NavLink></li>
+                        }
                     </ul>
                 </li>
                 }
@@ -204,8 +213,14 @@
                         <i class="bi bi-chevron-down ms-auto"></i>
                     </button>
                     <ul class="nav-content collapse @(IsGroupOpen("gestion") ? "show" : "")">
-                        <li><NavLink class="sidebar-sub-link" href="@PropertySettingsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-building"></i><span>Hospedajes</span></NavLink></li>
-                        <li><NavLink class="sidebar-sub-link" href="@UnitsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-house-door"></i><span>Unidades</span></NavLink></li>
+                        @if (HasModule(SaasModule.Properties))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@PropertySettingsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-building"></i><span>Hospedajes</span></NavLink></li>
+                        }
+                        @if (HasModule(SaasModule.Units))
+                        {
+                            <li><NavLink class="sidebar-sub-link" href="@UnitsHref" Match="NavLinkMatch.Prefix"><i class="bi bi-house-door"></i><span>Unidades</span></NavLink></li>
+                        }
                         @if (IsFeatureEnabled(x => x.EnableExternalCalendarSync))
                         {
                             <li><NavLink class="sidebar-sub-link" href="@ChannelSyncHref" Match="NavLinkMatch.Prefix"><i class="bi bi-arrow-repeat"></i><span>Sync canales</span></NavLink></li>
@@ -529,7 +544,12 @@
 
     private void DismissToast(string toast) => _toasts.Remove(toast);
 
-    private bool ShowOperationGroup => true;
+    private bool ShowOperationGroup =>
+        HasModule(SaasModule.Dashboard)
+        || HasModule(SaasModule.Bookings)
+        || HasModule(SaasModule.Guests)
+        || IsFeatureEnabled(x => x.EnableAgenda)
+        || (IsFeatureEnabled(x => x.EnableHousekeeping) && HasModule(SaasModule.Housekeeping));
 
     private bool ShowCommercialGroup =>
         IsFeatureEnabled(x => x.EnableQuotes)
@@ -539,7 +559,10 @@
         || IsFeatureEnabled(x => x.EnableTemplates);
 
     private bool ShowManagementGroup =>
-        true;
+        HasModule(SaasModule.Properties)
+        || HasModule(SaasModule.Units)
+        || IsFeatureEnabled(x => x.EnableExternalCalendarSync)
+        || (HasModule(SaasModule.Reports) && IsFeatureEnabled(x => x.EnableReports));
 
     private bool ShowAccountGroup => HasModule(SaasModule.Users) || HasModule(SaasModule.Configuration);
 
