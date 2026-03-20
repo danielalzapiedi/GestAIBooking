@@ -83,7 +83,8 @@
                 <div class="col-md-6">
                     <label class="form-label">@(_form.UserId is null ? "Password temporal" : "Nueva contraseña temporal")</label>
                     <div class="input-group">
-                        <input class="form-control" @bind="_form.Password" />
+                        <input class="form-control" type="@(_showPassword ? "text" : "password")" autocomplete="new-password" @bind="_form.Password" />
+                        <button type="button" class="btn btn-outline-secondary" @onclick="TogglePasswordVisibility">@(_showPassword ? "Ocultar" : "Ver")</button>
                         <button type="button" class="btn btn-outline-secondary" @onclick="GeneratePasswordForForm">Generar</button>
                     </div>
                     <div class="form-text">
@@ -109,6 +110,7 @@
 @code {
     private bool _loaded;
     private bool _showForm;
+    private bool _showPassword;
     private bool _saving;
     private string? _error;
     private List<AccountUserListItemDto> _items = new();
@@ -132,6 +134,7 @@
     private void NewUser()
     {
         _error = null;
+        _showPassword = false;
         _form = new UpsertAccountUserCommand(null, "", "", "", true, InternalUserRole.Reception, null, GenerateTemporaryPassword());
         _showForm = true;
     }
@@ -139,6 +142,7 @@
     private void Edit(AccountUserListItemDto item)
     {
         _error = null;
+        _showPassword = false;
         _form = new UpsertAccountUserCommand(item.UserId, item.Nombre, item.Apellido, item.Email, item.IsActive, item.Role, item.DefaultPropertyId, null);
         _showForm = true;
     }
@@ -176,8 +180,11 @@
     private void Cancel()
     {
         _showForm = false;
+        _showPassword = false;
         _error = null;
     }
+
+    private void TogglePasswordVisibility() => _showPassword = !_showPassword;
 
     private void GeneratePasswordForForm() => _form.Password = GenerateTemporaryPassword();
 
