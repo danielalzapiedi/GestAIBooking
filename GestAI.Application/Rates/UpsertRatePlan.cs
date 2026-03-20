@@ -11,6 +11,7 @@ namespace GestAI.Application.Rates;
 public sealed record SeasonalRateInputDto(string Name, int StartMonth, int StartDay, int EndMonth, int EndDay, RateAdjustmentType AdjustmentType, decimal AdjustmentValue, bool IsActive);
 public sealed record DateRangeRateInputDto(string Name, DateOnly DateFrom, DateOnly DateTo, RateAdjustmentType AdjustmentType, decimal AdjustmentValue, bool IsActive);
 public sealed record UpsertRatePlanCommand(int PropertyId, int? RatePlanId, int UnitId, string Name, decimal BaseNightlyRate, bool WeekendAdjustmentEnabled, RateAdjustmentType WeekendAdjustmentType, decimal WeekendAdjustmentValue, bool IsActive, List<SeasonalRateInputDto>? SeasonalRates, List<DateRangeRateInputDto>? DateRangeRates) : IRequest<AppResult<int>>;
+public sealed record ToggleRatePlanStatusCommand(int PropertyId, int RatePlanId, bool IsActive) : IRequest<AppResult>;
 
 public sealed class UpsertRatePlanCommandValidator : AbstractValidator<UpsertRatePlanCommand>
 {
@@ -118,5 +119,45 @@ public sealed class UpsertRatePlanCommandHandler : IRequestHandler<UpsertRatePla
         var daysInMonth = DateTime.DaysInMonth(2000, month); // año cualquiera
 
         return day <= daysInMonth;
+    }
+}
+
+public sealed class ToggleRatePlanStatusCommandHandler : IRequestHandler<ToggleRatePlanStatusCommand, AppResult>
+{
+    private readonly IAppDbContext _db;
+    private readonly ICurrentUser _current;
+    private readonly IPropertyFeatureService _features;
+    private readonly IUserAccessService _access;
+
+    public ToggleRatePlanStatusCommandHandler(IAppDbContext db, ICurrentUser current, IPropertyFeatureService features, IUserAccessService access)
+    {
+        _db = db;
+        _current = current;
+        _features = features;
+        _access = access;
+    }
+
+    public async Task<AppResult> Handle(ToggleRatePlanStatusCommand request, CancellationToken ct)
+    {
+        if (!await _features.IsEnabledAsync(request.PropertyId, PropertyFeature.AdvancedRates, ct))
+            return AppResult.Fail("feature_disabled", "Las tarifas avanzadas están desactivadas para este hospedaje.");
+
+        if (!await _access.HasPropertyModuleAccessAsync(request.PropertyId, SaasModule.Rates, ct))
+            return AppResult.Fail("forbidden", "No tenés acceso al módulo de tarifas.");
+
+        var entity = await _db.RatePlans
+            .Include(x => x.Property)
+            .FirstOrDefaultAsync(x => x.Id == request.RatePlanId
+                && x.PropertyId == request.PropertyId
+                && (x.Property.Account.OwnerUserId == _current.UserId || x.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)), ct);
+        if (entity is null)
+            return AppResult.Fail("not_found", "Tarifa no encontrada.");
+
+        if (!entity.Property.IsActive && request.IsActive)
+            return AppResult.Fail("property_inactive", "No podés activar tarifas en un hospedaje inactivo.");
+
+        entity.IsActive = request.IsActive;
+        await _db.SaveChangesAsync(ct);
+        return AppResult.Ok();
     }
 }

@@ -1,6 +1,7 @@
 @page "/housekeeping/{PropertyId:int}"
 @using GestAI.Web.Dtos
 @inject ApiClient Api
+@inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject GestAI.Web.Service.PropertyFeatureState FeatureState
 
@@ -38,7 +39,7 @@ else
                             <div class="table-responsive">
                                 <table class="table table-hover align-middle">
                                     <thead>
-                                        <tr><th>Unidad</th><th>Título</th><th>Fecha</th><th>Prioridad</th><th>Reserva</th><th></th></tr>
+                                        <tr><th>Unidad</th><th>Título</th><th>Fecha</th><th>Prioridad</th><th>Estado</th><th>Reserva</th><th></th></tr>
                                     </thead>
                                     <tbody>
                                         @foreach (var task in _tasks)
@@ -48,10 +49,20 @@ else
                                                 <td>@task.Title<div class="small text-muted">@task.Notes</div></td>
                                                 <td>@task.ScheduledDate</td>
                                                 <td>@task.Priority</td>
+                                                <td><span class="badge @StatusBadge(task.Status)">@task.Status</span></td>
                                                 <td>@task.BookingCode</td>
                                                 <td class="text-end">
-                                                    <button class="btn btn-sm btn-outline-primary me-2" @onclick="(() => OpenBooking(task.BookingId))">Abrir</button>
-                                                    <button class="btn btn-sm btn-success" @onclick="(() => Complete(task.Id))">Marcar limpieza completada</button>
+                                                    <div class="btn-group btn-group-sm">
+                                                        <button class="btn btn-outline-primary" @onclick="(() => OpenBooking(task.BookingId))">Abrir</button>
+                                                        @if (task.Status == OperationalTaskStatus.Pending)
+                                                        {
+                                                            <button class="btn btn-outline-secondary" @onclick="(() => UpdateStatus(task.Id, OperationalTaskStatus.InProgress))">En limpieza</button>
+                                                        }
+                                                        @if (task.Status != OperationalTaskStatus.Completed)
+                                                        {
+                                                            <button class="btn btn-success" @onclick="(() => Complete(task.Id))">Completar</button>
+                                                        }
+                                                    </div>
                                                 </td>
                                             </tr>
                                         }
@@ -102,7 +113,29 @@ else
         if (_housekeepingEnabled)
             await Load();
     }
-    private async Task Load(){ _tasks = (await Api.GetAsync<AppResult<List<OperationalTaskDto>>>($"api/properties/{PropertyId}/operations/tasks?status={OperationalTaskStatus.Pending}&type={OperationalTaskType.Cleaning}"))?.Data ?? new(); _units = (await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units"))?.Data ?? new(); }
-    private async Task Complete(int taskId){ await Api.PostJsonAsync<AppResult, object>($"api/properties/{PropertyId}/operations/tasks/{taskId}/complete", new { }); await Load(); }
+    private async Task Load(){ _tasks = (await Api.GetAsync<AppResult<List<OperationalTaskDto>>>($"api/properties/{PropertyId}/operations/tasks?type={OperationalTaskType.Cleaning}"))?.Data ?? new(); _units = (await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units"))?.Data ?? new(); }
+    private async Task Complete(int taskId)
+    {
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "¿Marcar la limpieza como completada? La unidad quedará disponible como limpia.");
+        if (!confirmed)
+            return;
+
+        await Api.PostJsonAsync<AppResult, object>($"api/properties/{PropertyId}/operations/tasks/{taskId}/complete", new { });
+        await Load();
+    }
+
+    private async Task UpdateStatus(int taskId, OperationalTaskStatus status)
+    {
+        await Api.PostJsonAsync<AppResult, object>($"api/properties/{PropertyId}/operations/tasks/{taskId}/status", new { Status = status });
+        await Load();
+    }
     private void OpenBooking(int? bookingId){ if (bookingId.HasValue) Nav.NavigateTo($"/bookings/{PropertyId}/{bookingId.Value}"); }
+    private static string StatusBadge(OperationalTaskStatus status) => status switch
+    {
+        OperationalTaskStatus.Pending => "bg-warning text-dark",
+        OperationalTaskStatus.InProgress => "bg-primary",
+        OperationalTaskStatus.Completed => "bg-success",
+        OperationalTaskStatus.Cancelled => "bg-secondary",
+        _ => "bg-light text-dark border"
+    };
 }

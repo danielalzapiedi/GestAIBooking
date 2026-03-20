@@ -1,5 +1,6 @@
 @page "/guests/{PropertyId:int}"
 @inject ApiClient Api
+@inject IJSRuntime JS
 @inject GestAI.Web.Service.PropertyFeatureState FeatureState
 @using GestAI.Web.Dtos
 
@@ -202,6 +203,10 @@ else
 
     private async Task DeleteGuest(GuestDto g)
     {
+        var confirmed = await JS.InvokeAsync<bool>("confirm", $"¿Eliminar al huésped '{g.FullName}'? Esta acción lo desactivará para nuevas operaciones.");
+        if (!confirmed)
+            return;
+
         var res = await Api.DeleteAsync<AppResult>($"api/properties/{PropertyId}/guests/{g.Id}");
         await Load();
     }

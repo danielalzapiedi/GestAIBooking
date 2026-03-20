@@ -18,4 +18,10 @@ public sealed class RatesController(IMediator mediator) : ControllerBase
 
     [HttpPut("{ratePlanId:int}")]
     public async Task<IActionResult> Update(int propertyId, int ratePlanId, [FromBody] UpsertRatePlanCommand command, CancellationToken ct) => Ok(await mediator.Send(command with { PropertyId = propertyId, RatePlanId = ratePlanId }, ct));
+
+    public sealed record ToggleStatusBody(bool IsActive);
+
+    [HttpPost("{ratePlanId:int}/status")]
+    public async Task<IActionResult> ToggleStatus(int propertyId, int ratePlanId, [FromBody] ToggleStatusBody body, CancellationToken ct)
+        => Ok(await mediator.Send(new ToggleRatePlanStatusCommand(propertyId, ratePlanId, body.IsActive), ct));
 }

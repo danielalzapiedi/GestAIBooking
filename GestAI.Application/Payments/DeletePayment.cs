@@ -43,7 +43,10 @@ public sealed class DeletePaymentCommandHandler : IRequestHandler<DeletePaymentC
             return AppResult.Fail("forbidden", "No tenés acceso al módulo de pagos.");
 
         var payment = await _db.Payments
-            .FirstOrDefaultAsync(p => p.PropertyId == request.PropertyId && p.Id == request.PaymentId && p.Property.Account.OwnerUserId == _current.UserId, ct);
+            .FirstOrDefaultAsync(p => p.PropertyId == request.PropertyId
+                && p.Id == request.PaymentId
+                && (p.Property.Account.OwnerUserId == _current.UserId
+                    || p.Property.Account.Users.Any(au => au.UserId == _current.UserId && au.IsActive)), ct);
 
         if (payment is null)
             return AppResult.Fail("not_found", "Pago no encontrado.");

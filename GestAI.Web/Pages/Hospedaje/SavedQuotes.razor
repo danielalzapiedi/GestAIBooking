@@ -64,7 +64,7 @@ else
                         <button class="btn btn-sm btn-outline-primary me-1" @onclick="(() => Select(item))">Ver</button>
                         @if (item.Status != SavedQuoteStatus.Converted)
                         {
-                            <button class="btn btn-sm btn-primary" @onclick="(() => Convert(item))">Convertir</button>
+                            <button class="btn btn-sm btn-primary" @onclick="(() => OpenConvertModal(item))">Convertir</button>
                         }
                         else if (item.CreatedBookingId.HasValue)
                         {
@@ -98,7 +98,95 @@ else
             <div class="mt-3 alert alert-info mb-0">@_selected.Summary</div>
         }
     </div></div>
+    }
 }
+
+@if (_convertModalOpen && _quoteToConvert is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Convertir cotización a reserva</h5>
+                    <button type="button" class="btn-close" @onclick="CloseConvertModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <div><strong>Cotización:</strong> @_quoteToConvert.PublicToken</div>
+                        <div><strong>Unidad:</strong> @(_quoteToConvert.UnitName ?? "Sin unidad")</div>
+                        <div><strong>Estadía:</strong> @_quoteToConvert.CheckInDate.ToString("dd/MM/yyyy") al @_quoteToConvert.CheckOutDate.ToString("dd/MM/yyyy")</div>
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(_convertError))
+                    {
+                        <div class="alert alert-danger">@_convertError</div>
+                    }
+
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">Buscar huésped existente</label>
+                            <input class="form-control" value="@_convertGuestQuery" @oninput="SearchGuestsForConvert" placeholder="Buscar por nombre, teléfono o email" />
+                        </div>
+
+                        @if (_convertGuestResults.Count > 0)
+                        {
+                            <div class="col-12">
+                                <div class="list-group">
+                                    @foreach (var guest in _convertGuestResults)
+                                    {
+                                        <button type="button" class="list-group-item list-group-item-action" @onclick="(() => SelectConvertGuest(guest))">
+                                            <div class="d-flex justify-content-between">
+                                                <div>
+                                                    <strong>@guest.FullName</strong>
+                                                    <div class="small text-muted">@guest.Phone @guest.Email</div>
+                                                </div>
+                                                <span class="badge bg-primary">Seleccionar</span>
+                                            </div>
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                        @if (_convertGuestId > 0)
+                        {
+                            <div class="col-12">
+                                <div class="alert alert-success mb-0">Huésped seleccionado: <strong>@_convertGuestSelectedName</strong></div>
+                            </div>
+                        }
+
+                        <div class="col-12"><hr class="my-1" /></div>
+
+                        <div class="col-12">
+                            <div class="fw-semibold">O crear un huésped rápido</div>
+                            <div class="small text-muted">Útil si la cotización todavía no tiene un huésped registrado en el sistema.</div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Nombre completo</label>
+                            <input class="form-control" @bind="_quickGuestFullName" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Teléfono</label>
+                            <input class="form-control" @bind="_quickGuestPhone" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Email</label>
+                            <input class="form-control" @bind="_quickGuestEmail" />
+                        </div>
+                        <div class="col-12">
+                            <button class="btn btn-outline-primary" @onclick="CreateGuestForConvert">Crear huésped y seleccionar</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" @onclick="CloseConvertModal">Cancelar</button>
+                    <button class="btn btn-primary" @onclick="ConfirmConvert" disabled="@(_converting || _convertGuestId <= 0)">
+                        @(_converting ? "Convirtiendo..." : "Convertir a reserva")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 }
 
 @code {
@@ -112,6 +200,17 @@ else
     private bool _loaded;
     private string? _message;
     private bool _success;
+    private bool _convertModalOpen;
+    private bool _converting;
+    private SavedQuoteDto? _quoteToConvert;
+    private string _convertGuestQuery = string.Empty;
+    private List<GuestSearchItemDto> _convertGuestResults = new();
+    private int _convertGuestId;
+    private string _convertGuestSelectedName = string.Empty;
+    private string? _convertError;
+    private string _quickGuestFullName = string.Empty;
+    private string? _quickGuestPhone;
+    private string? _quickGuestEmail;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -139,16 +238,95 @@ else
         _selected = (await Api.GetAsync<AppResult<SavedQuoteDto>>($"api/properties/{PropertyId}/quotes/saved/{item.Id}"))?.Data ?? item;
     }
 
-    private async Task Convert(SavedQuoteDto item)
+    private void OpenConvertModal(SavedQuoteDto item)
     {
-        var guestIdText = await JS.InvokeAsync<string>("prompt", "Ingresá el GuestId para convertir la cotización", "0");
-        if (!int.TryParse(guestIdText, out var guestId) || guestId <= 0)
-            return;
-        var res = await Api.PostAsync<ConvertSavedQuoteToBookingCommand, AppResult<int>>($"api/properties/{PropertyId}/quotes/saved/{item.Id}/convert", new ConvertSavedQuoteToBookingCommand(PropertyId, item.Id, guestId, BookingStatus.Tentative, "Creada desde cotización guardada"));
-        _success = res?.Success == true;
-        _message = _success ? "Cotización convertida correctamente." : (res?.Message ?? "No se pudo convertir la cotización.");
-        await Load();
+        _quoteToConvert = item;
+        _convertModalOpen = true;
+        _converting = false;
+        _convertError = null;
+        _convertGuestResults = new();
+        _convertGuestId = 0;
+        _convertGuestSelectedName = string.Empty;
+        _convertGuestQuery = item.GuestName ?? item.GuestEmail ?? item.GuestPhone ?? string.Empty;
+        _quickGuestFullName = item.GuestName ?? string.Empty;
+        _quickGuestPhone = item.GuestPhone;
+        _quickGuestEmail = item.GuestEmail;
     }
 
-    [Inject] public IJSRuntime JS { get; set; } = default!;
+    private void CloseConvertModal()
+    {
+        _convertModalOpen = false;
+        _quoteToConvert = null;
+        _convertError = null;
+        _convertGuestResults = new();
+        _convertGuestId = 0;
+        _convertGuestSelectedName = string.Empty;
+    }
+
+    private async Task SearchGuestsForConvert(ChangeEventArgs e)
+    {
+        _convertGuestQuery = e.Value?.ToString() ?? string.Empty;
+        _convertError = null;
+        if (_convertGuestQuery.Trim().Length < 2)
+        {
+            _convertGuestResults = new();
+            return;
+        }
+
+        var res = await Api.GetAsync<AppResult<List<GuestSearchItemDto>>>($"api/properties/{PropertyId}/guests/search?q={Uri.EscapeDataString(_convertGuestQuery.Trim())}");
+        _convertGuestResults = res?.Data ?? new();
+    }
+
+    private void SelectConvertGuest(GuestSearchItemDto guest)
+    {
+        _convertGuestId = guest.Id;
+        _convertGuestSelectedName = guest.FullName;
+        _convertGuestQuery = guest.FullName;
+        _convertGuestResults = new();
+        _convertError = null;
+    }
+
+    private async Task CreateGuestForConvert()
+    {
+        _convertError = null;
+        if (string.IsNullOrWhiteSpace(_quickGuestFullName))
+        {
+            _convertError = "Ingresá al menos el nombre completo para crear el huésped.";
+            return;
+        }
+
+        var command = new UpsertGuestCommand(PropertyId, null, _quickGuestFullName.Trim(), _quickGuestPhone?.Trim(), _quickGuestEmail?.Trim(), null, null, null);
+        var result = await Api.PostJsonAsync<AppResult<int>, UpsertGuestCommand>($"api/properties/{PropertyId}/guests", command);
+        if (result?.Success != true || result.Data <= 0)
+        {
+            _convertError = result?.Message ?? "No se pudo crear el huésped.";
+            return;
+        }
+
+        _convertGuestId = result.Data;
+        _convertGuestSelectedName = _quickGuestFullName.Trim();
+        _convertGuestQuery = _convertGuestSelectedName;
+        _convertGuestResults = new();
+    }
+
+    private async Task ConfirmConvert()
+    {
+        if (_quoteToConvert is null || _convertGuestId <= 0)
+            return;
+
+        _converting = true;
+        _convertError = null;
+        var res = await Api.PostAsync<ConvertSavedQuoteToBookingCommand, AppResult<int>>($"api/properties/{PropertyId}/quotes/saved/{_quoteToConvert.Id}/convert", new ConvertSavedQuoteToBookingCommand(PropertyId, _quoteToConvert.Id, _convertGuestId, BookingStatus.Tentative, "Creada desde cotización guardada"));
+        _converting = false;
+        _success = res?.Success == true;
+        _message = _success ? "Cotización convertida correctamente." : (res?.Message ?? "No se pudo convertir la cotización.");
+        if (!_success)
+        {
+            _convertError = _message;
+            return;
+        }
+
+        CloseConvertModal();
+        await Load();
+    }
 }
