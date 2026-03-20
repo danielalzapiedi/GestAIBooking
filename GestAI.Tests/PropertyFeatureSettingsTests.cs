@@ -138,7 +138,7 @@ public class PropertyFeatureSettingsTests
         await db.SaveChangesAsync();
 
         var handler = new GestAI.Application.Reports.GetReportsQueryHandler(db, new FakeCurrentUser(), new PropertyFeatureService(db), new FakeUserAccessService(reportsEnabled: false));
-        var result = await handler.Handle(new GestAI.Application.Reports.GetReportsQuery(1, new DateOnly(2026, 1, 1), new DateOnly(2026, 2, 1), 2026, 1), CancellationToken.None);
+        var result = await handler.Handle(new GestAI.Application.Reports.GetReportsQuery(1, new DateOnly(2026, 1, 1), new DateOnly(2026, 2, 1)), CancellationToken.None);
 
         Assert.False(result.Success);
         Assert.Equal("forbidden", result.ErrorCode);

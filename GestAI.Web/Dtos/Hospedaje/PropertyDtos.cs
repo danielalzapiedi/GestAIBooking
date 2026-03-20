@@ -30,4 +30,4 @@ public sealed class PropertyDetailDto
     public string? PublicDescription { get; set; }
 }
 public sealed record UpsertPropertyCommand(int? PropertyId, string Name, string? CommercialName, int Type, bool IsActive, string? Phone, string? Email, string? City, string? Province, string? Country, string? Address, TimeOnly? DefaultCheckInTime, TimeOnly? DefaultCheckOutTime, string Currency, string? DepositPolicy, decimal DefaultDepositPercentage, string? CancellationPolicy, string? TermsAndConditions, string? CheckInInstructions, string? PropertyRules, string? CommercialContactName, string? CommercialContactPhone, string? CommercialContactEmail, string? PublicSlug, string? PublicDescription);
-public sealed record SetupStatusDto(bool HasAnyAccount, int? DefaultAccountId, bool HasAnyProperty, int? DefaultPropertyId, bool HasAnyUnit, int? DefaultUnitId);
+public sealed record SetupStatusDto(bool HasAnyAccount, int? DefaultAccountId, bool HasAnyProperty, int? DefaultPropertyId, bool HasAnyUnit, int? DefaultUnitId, int? RecommendedPropertyId);

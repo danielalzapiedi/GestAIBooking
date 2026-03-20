@@ -43,7 +43,7 @@ else
                             <input class="form-control" type="date" value="@_checkInStr" @onchange="OnCheckInChanged" />
                         </div>
                         <div class="col-12 col-md-3">
-                            <label class="form-label">Check-out (excl.)</label>
+                            <label class="form-label">Check-out</label>
                             <input class="form-control" type="date" value="@_checkOutStr" @onchange="OnCheckOutChanged" />
                         </div>
 
@@ -201,8 +201,8 @@ else
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-outline-secondary" @onclick="CloseQuickGuest">Cancelar</button>
-                    <button class="btn btn-primary" @onclick="SaveQuickGuest">Crear y seleccionar</button>
+                    <button class="btn btn-outline-secondary" disabled="@_guestSaving" @onclick="CloseQuickGuest">Cancelar</button>
+                    <button class="btn btn-primary" disabled="@_guestSaving" @onclick="SaveQuickGuest">Crear y seleccionar</button>
                 </div>
             </div>
         </div>
@@ -252,25 +252,26 @@ else
     private string _guestSelectedName = "";
     private bool _guestModalOpen;
     private string? _guestError;
+    private bool _guestSaving;
     private string _quickGuestFullName = "";
     private string? _quickGuestPhone;
     private string? _quickGuestEmail;
     private bool _simpleGuestMode;
-    private bool _directBookingEnabled = true;
 
-    private IEnumerable<BookingSource> AvailableSources =>
-        _directBookingEnabled ? Enum.GetValues<BookingSource>() : Enum.GetValues<BookingSource>().Where(x => x != BookingSource.Direct);
+    private IEnumerable<BookingSource> AvailableSources => Enum.GetValues<BookingSource>();
 
     protected override async Task OnParametersSetAsync()
     {
+        _loaded = false;
+        _error = null;
         var settings = await FeatureState.EnsureAsync(PropertyId);
         _simpleGuestMode = settings?.UseSimpleGuestMode == true;
-        _directBookingEnabled = settings?.EnableDirectBooking ?? true;
-        if (!_directBookingEnabled && _source == BookingSource.Direct)
-            _source = BookingSource.WalkIn;
 
         var uRes = await Api.GetAsync<AppResult<List<UnitListItemDto>>>($"api/properties/{PropertyId}/units");
         _units = uRes?.Data ?? new();
+        if (uRes?.Success == false)
+            _error = uRes.Message;
+
         _unitId = UnitId ?? _units.FirstOrDefault()?.Id ?? 0;
         if (DateOnly.TryParse(CheckIn, out var ci)) _checkIn = ci;
         if (DateOnly.TryParse(CheckOut, out var co)) _checkOut = co;
@@ -280,7 +281,11 @@ else
 
         if (BookingId.HasValue)
         {
-            var detail = (await Api.GetAsync<AppResult<BookingDetailDto>>($"api/properties/{PropertyId}/bookings/{BookingId.Value}"))?.Data;
+            var detailResponse = await Api.GetAsync<AppResult<BookingDetailDto>>($"api/properties/{PropertyId}/bookings/{BookingId.Value}");
+            if (detailResponse?.Success == false)
+                _error = detailResponse.Message;
+
+            var detail = detailResponse?.Data;
             if (detail is not null)
             {
                 _unitId = detail.UnitId;
@@ -292,8 +297,6 @@ else
                 _notes = detail.Notes;
                 _internalNotes = detail.InternalNotes;
                 _source = detail.Source;
-                if (!_directBookingEnabled && _source == BookingSource.Direct)
-                    _source = BookingSource.WalkIn;
                 _status = detail.Status;
                 _manualPriceOverride = detail.ManualPriceOverride;
                 _guestId = detail.GuestId;
@@ -381,17 +384,18 @@ else
     }
 
     private void Back() => Nav.NavigateTo(BookingId.HasValue ? $"/bookings/{PropertyId}/{BookingId.Value}" : $"/bookings/grid/{PropertyId}");
-    private void OpenQuickGuest() { _guestError = null; _quickGuestFullName = ""; _quickGuestPhone = null; _quickGuestEmail = null; _guestModalOpen = true; }
-    private void CloseQuickGuest() { _guestModalOpen = false; _guestError = null; }
+    private void OpenQuickGuest() { _guestError = null; _guestSaving = false; _quickGuestFullName = ""; _quickGuestPhone = null; _quickGuestEmail = null; _guestModalOpen = true; }
+    private void CloseQuickGuest() { _guestModalOpen = false; _guestSaving = false; _guestError = null; }
 
     private async Task SaveQuickGuest()
     {
         _guestError = null;
-        if (string.IsNullOrWhiteSpace(_quickGuestFullName)) { _guestError = "El nombre es obligatorio."; return; }
+        _guestSaving = true;
+        if (string.IsNullOrWhiteSpace(_quickGuestFullName)) { _guestError = "El nombre es obligatorio."; _guestSaving = false; return; }
         var cmd = new UpsertGuestCommand(PropertyId, null, _quickGuestFullName, _quickGuestPhone, _simpleGuestMode ? null : _quickGuestEmail, null, null, null);
         var res = await Api.PostJsonAsync<AppResult<int>, UpsertGuestCommand>($"api/properties/{PropertyId}/guests", cmd);
-        if (res?.Success != true || res.Data <= 0) { _guestError = res?.Message ?? "No se pudo crear el huésped."; return; }
-        _guestId = res.Data; _guestSelectedName = _quickGuestFullName; _guestQuery = _quickGuestFullName; _guestModalOpen = false;
+        if (res?.Success != true || res.Data <= 0) { _guestError = res?.Message ?? "No se pudo crear el huésped."; _guestSaving = false; return; }
+        _guestId = res.Data; _guestSelectedName = _quickGuestFullName; _guestQuery = _quickGuestFullName; _guestModalOpen = false; _guestSaving = false;
     }
 
     private async Task OnCheckInChanged(ChangeEventArgs e)
