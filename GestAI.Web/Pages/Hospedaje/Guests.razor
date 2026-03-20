@@ -4,8 +4,17 @@
 @inject GestAI.Web.Service.PropertyFeatureState FeatureState
 @using GestAI.Web.Dtos
 
-<div class="pagetitle">
-    <h1>Huéspedes</h1>
+<div class="pagetitle d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+        <h1>Huéspedes</h1>
+        <p class="text-muted mb-0">Gestioná la base de huéspedes del hospedaje y reutilizalos en nuevas reservas.</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <span class="ui-badge @(_simpleGuestMode ? "ui-badge-info" : "ui-badge-neutral")">
+            @(_simpleGuestMode ? "Modo simple" : "Modo completo")
+        </span>
+        <button class="btn btn-outline-primary" @onclick="Load"><i class="bi bi-arrow-repeat"></i> Actualizar</button>
+    </div>
 </div>
 
 <div class="row g-2 align-items-end mb-3">
@@ -20,17 +29,43 @@
 
 @if (!_loaded)
 {
-    <p>Cargando...</p>
+    <EmptyState Title="Cargando huéspedes"
+                Description="Estamos trayendo la base de huéspedes del hospedaje."
+                Icon="bi-people" />
 }
 else if (_guests is null)
 {
-    <div class="alert alert-danger">No se pudieron cargar los huéspedes.</div>
+    <EmptyState Title="No se pudieron cargar los huéspedes"
+                Description="Reintentá para volver a consultar la base de huéspedes."
+                Icon="bi-exclamation-triangle">
+        <button class="btn btn-outline-primary" @onclick="Load">Reintentar</button>
+    </EmptyState>
+}
+else if (_guests.Count == 0)
+{
+    <EmptyState Title="Todavía no hay huéspedes cargados"
+                Description="@(_simpleGuestMode
+                    ? "Creá el primer huésped con nombre y teléfono para agilizar nuevas reservas."
+                    : "Creá el primer huésped para reutilizar sus datos en reservas futuras.")"
+                Icon="bi-person-plus">
+        <button class="btn btn-primary" @onclick="NewGuest"><i class="bi bi-plus"></i> Nuevo huésped</button>
+    </EmptyState>
 }
 else
 {
     <div class="card">
         <div class="card-body">
-            <h5 class="card-title">Listado</h5>
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+                <div>
+                    <h5 class="card-title mb-1">Listado</h5>
+                    <div class="small text-muted">
+                        @(_simpleGuestMode
+                            ? "Vista reducida para registrar huéspedes con los datos mínimos."
+                            : "Vista completa con contacto y documentación.")
+                    </div>
+                </div>
+                <span class="ui-badge ui-badge-neutral">@_guests.Count</span>
+            </div>
             <table class="table table-sm">
                 <thead>
                     <tr>
@@ -90,18 +125,18 @@ else
                             <label class="form-label">Teléfono</label>
                             <input class="form-control" @bind="_editing!.Phone" />
                         </div>
-                        <div class="col-12 col-md-6">
-                            <label class="form-label">Email</label>
-                            <input class="form-control" @bind="_editing!.Email" />
-                        </div>
-@if (!_simpleGuestMode)
+                        @if (!_simpleGuestMode)
                         {
                             <div class="col-12 col-md-6">
-                                <label class="form-label">Tipo doc (int)</label>
+                                <label class="form-label">Email</label>
+                                <input class="form-control" @bind="_editing!.Email" />
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">Tipo de documento</label>
                                 <input class="form-control" type="number" @bind="_editing!.DocumentType" />
                             </div>
                             <div class="col-12 col-md-6">
-                                <label class="form-label">Nro doc</label>
+                                <label class="form-label">Número de documento</label>
                                 <input class="form-control" @bind="_editing!.DocumentNumber" />
                             </div>
                             <div class="col-12">
@@ -207,7 +242,7 @@ else
         if (!confirmed)
             return;
 
-        var res = await Api.DeleteAsync<AppResult>($"api/properties/{PropertyId}/guests/{g.Id}");
+        await Api.DeleteAsync<AppResult>($"api/properties/{PropertyId}/guests/{g.Id}");
         await Load();
     }
 
