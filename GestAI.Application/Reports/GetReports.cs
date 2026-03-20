@@ -1,3 +1,4 @@
+using FluentValidation;
 using GestAI.Application.Abstractions;
 using GestAI.Application.Common;
 using GestAI.Domain.Enums;
@@ -8,7 +9,7 @@ namespace GestAI.Application.Reports;
 
 public sealed record GetReportsQuery(int PropertyId, DateOnly From, DateOnly ToExclusive) : IRequest<AppResult<ReportsDto>>;
 
-public sealed class GetReportsQueryValidator : FluentValidation.AbstractValidator<GetReportsQuery>
+public sealed class GetReportsQueryValidator : AbstractValidator<GetReportsQuery>
 {
     public GetReportsQueryValidator()
     {
