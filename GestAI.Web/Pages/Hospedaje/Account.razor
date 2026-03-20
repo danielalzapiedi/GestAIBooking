@@ -25,6 +25,10 @@ else
             <div class="card h-100">
                 <div class="card-body">
                     <h5 class="card-title">Datos generales</h5>
+                    @if (!string.IsNullOrWhiteSpace(_saveError))
+                    {
+                        <div class="alert alert-danger">@_saveError</div>
+                    }
                     <div class="row g-3 align-items-end">
                         <div class="col-12 col-lg-5">
                             <label class="form-label">Nombre de la cuenta</label>
@@ -47,7 +51,7 @@ else
                             </select>
                         </div>
                         <div class="col-12 col-lg-3 d-flex justify-content-lg-end">
-                            <button class="btn btn-primary w-100 account-save-button" @onclick="Save"><i class="bi bi-check2"></i> Guardar cambios</button>
+                            <button class="btn btn-primary w-100 account-save-button" disabled="@_saving" @onclick="Save"><i class="bi bi-check2"></i> Guardar cambios</button>
                         </div>
                     </div>
 
@@ -195,11 +199,13 @@ else
 
 @code {
     private bool _loaded;
+    private bool _saving;
     private AccountSummaryDto? _summary;
     private List<AccountAuditItemDto> _audit = new();
     private List<AccountPlanOptionDto> _planOptions = new();
     private string _name = string.Empty;
     private int? _selectedPlanId;
+    private string? _saveError;
     private string? _auditEntityName;
     private string? _auditUserName;
     private DateOnly? _auditFrom = DateOnly.FromDateTime(DateTime.Today.AddDays(-30));
@@ -240,12 +246,22 @@ else
 
     private async Task Save()
     {
+        _saveError = null;
         if (!_planOptions.Any(x => x.Id == _selectedPlanId))
             _selectedPlanId = null;
 
-        await Api.PutAsync("api/saas/account", new UpdateAccountCommand(_name, _selectedPlanId));
+        _saving = true;
+        var response = await Api.PutAsync<UpdateAccountCommand, AppResult>("api/saas/account", new UpdateAccountCommand(_name, _selectedPlanId));
+        if (response?.Success != true)
+        {
+            _saveError = response?.Message ?? "No se pudo actualizar la cuenta.";
+            _saving = false;
+            return;
+        }
+
         await LoadAsync();
         Api.Toast("Cuenta actualizada correctamente.");
+        _saving = false;
     }
 
     private void SelectPlan(int planId) => _selectedPlanId = planId;

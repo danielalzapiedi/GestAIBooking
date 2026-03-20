@@ -22,6 +22,10 @@ else
 
 <div class="card mb-3">
     <div class="card-body">
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="alert alert-danger">@_error</div>
+        }
         <div class="row g-3 align-items-end">
             <div class="col-12 col-md-3">
                 <label class="form-label">Desde</label>
@@ -152,6 +156,7 @@ else
 
     private bool _loaded;
     private ReportsDto? _reports;
+    private string? _error;
     private DateOnly _from = DateOnly.FromDateTime(DateTime.Today.AddDays(-30));
     private DateOnly _toInclusive = DateOnly.FromDateTime(DateTime.Today);
 
@@ -181,8 +186,21 @@ else
     private async Task Load()
     {
         _loaded = false;
+        _error = null;
+
+        if (_toInclusive < _from)
+        {
+            _reports = null;
+            _error = "La fecha hasta debe ser igual o posterior a la fecha desde.";
+            _loaded = true;
+            return;
+        }
+
         var toExclusive = _toInclusive.AddDays(1);
-        _reports = (await Api.GetAsync<AppResult<ReportsDto>>($"api/properties/{PropertyId}/reports?from={_from:yyyy-MM-dd}&to={toExclusive:yyyy-MM-dd}"))?.Data;
+        var response = await Api.GetAsync<AppResult<ReportsDto>>($"api/properties/{PropertyId}/reports?from={_from:yyyy-MM-dd}&to={toExclusive:yyyy-MM-dd}");
+        _reports = response?.Data;
+        if (response?.Success == false)
+            _error = response.Message;
         _loaded = true;
     }
 

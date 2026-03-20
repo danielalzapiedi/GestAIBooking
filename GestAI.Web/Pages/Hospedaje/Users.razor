@@ -69,6 +69,10 @@
     <div class="card">
         <div class="card-body pt-3">
             <h5 class="card-title">@(_form.UserId is null ? "Nuevo usuario" : "Editar usuario")</h5>
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <div class="alert alert-danger">@_error</div>
+            }
             <div class="row g-3">
                 <div class="col-md-6"><label class="form-label">Nombre</label><input class="form-control" @bind="_form.Nombre" /></div>
                 <div class="col-md-6"><label class="form-label">Apellido</label><input class="form-control" @bind="_form.Apellido" /></div>
@@ -95,8 +99,8 @@
                 </div>
             </div>
             <div class="mt-3 d-flex gap-2">
-                <button class="btn btn-primary" @onclick="Save">Guardar</button>
-                <button class="btn btn-outline-secondary" @onclick="Cancel">Cancelar</button>
+                <button class="btn btn-primary" disabled="@_saving" @onclick="Save">Guardar</button>
+                <button class="btn btn-outline-secondary" disabled="@_saving" @onclick="Cancel">Cancelar</button>
             </div>
         </div>
     </div>
@@ -105,6 +109,8 @@
 @code {
     private bool _loaded;
     private bool _showForm;
+    private bool _saving;
+    private string? _error;
     private List<AccountUserListItemDto> _items = new();
     private List<PropertyListItemDto> _properties = new();
     private UpsertAccountUserCommand _form = new(null, "", "", "", true, InternalUserRole.Reception, null, GenerateTemporaryPassword());
@@ -125,26 +131,40 @@
 
     private void NewUser()
     {
+        _error = null;
         _form = new UpsertAccountUserCommand(null, "", "", "", true, InternalUserRole.Reception, null, GenerateTemporaryPassword());
         _showForm = true;
     }
 
     private void Edit(AccountUserListItemDto item)
     {
+        _error = null;
         _form = new UpsertAccountUserCommand(item.UserId, item.Nombre, item.Apellido, item.Email, item.IsActive, item.Role, item.DefaultPropertyId, null);
         _showForm = true;
     }
 
     private async Task Save()
     {
+        _error = null;
+        _saving = true;
+
+        AppResult? response;
         if (_form.UserId is null)
-            await Api.PostAsync("api/saas/users", _form);
+            response = await Api.PostJsonAsync<AppResult, UpsertAccountUserCommand>("api/saas/users", _form);
         else
-            await Api.PutAsync($"api/saas/users/{_form.UserId}", _form);
+            response = await Api.PutAsync<UpsertAccountUserCommand, AppResult>($"api/saas/users/{_form.UserId}", _form);
+
+        if (response?.Success != true)
+        {
+            _error = response?.Message ?? "No se pudo guardar el usuario.";
+            _saving = false;
+            return;
+        }
 
         _showForm = false;
         await LoadAsync();
         Api.Toast(string.IsNullOrWhiteSpace(_form.Password) ? "Usuario guardado correctamente." : "Usuario guardado y contraseña temporal actualizada.");
+        _saving = false;
     }
 
     private async Task Toggle(AccountUserListItemDto item)
@@ -153,7 +173,11 @@
         await LoadAsync();
     }
 
-    private void Cancel() => _showForm = false;
+    private void Cancel()
+    {
+        _showForm = false;
+        _error = null;
+    }
 
     private void GeneratePasswordForForm() => _form.Password = GenerateTemporaryPassword();
 
