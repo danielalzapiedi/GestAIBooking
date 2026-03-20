@@ -30,6 +30,12 @@ else
 
 <div class="card">
     <div class="card-body pt-3">
+        <div class="summary-pill-grid mb-3">
+            <div class="summary-pill"><div class="label">Tarifas</div><div class="value">@Filtered.Count()</div></div>
+            <div class="summary-pill"><div class="label">Activas</div><div class="value">@Filtered.Count(x => x.IsActive)</div></div>
+            <div class="summary-pill"><div class="label">Con reglas</div><div class="value">@Filtered.Count(x => x.SeasonalRates.Any() || x.DateRangeRates.Any())</div></div>
+        </div>
+
         <div class="row g-2 mb-3">
             <div class="col-md-4"><input class="form-control" placeholder="Buscar tarifa" @bind="_search" /></div>
             <div class="col-md-4">
@@ -74,7 +80,7 @@ else
                             <td><strong>@r.Name</strong></td>
                             <td>@r.UnitName</td>
                             <td>@r.BaseNightlyRate.ToString("0.00")</td>
-                            <td>@(r.WeekendAdjustmentEnabled ? $"{r.WeekendAdjustmentType} {r.WeekendAdjustmentValue:0.##}" : "No")</td>
+                            <td>@WeekendAdjustmentLabel(r)</td>
                             <td><StatusBadge IsActive="@r.IsActive" Text="@(r.IsActive ? "Activa" : "Inactiva")" /></td>
                             <td><span class="small text-muted">Temp: @r.SeasonalRates.Count · Rangos: @r.DateRangeRates.Count</span></td>
                             <td class="text-end">
@@ -134,4 +140,16 @@ else
         await Api.PostAsync($"api/properties/{PropertyId}/rates/{rate.Id}/status", new { isActive = !rate.IsActive });
         _rates = (await Api.GetAsync<AppResult<List<RatePlanDto>>>($"api/properties/{PropertyId}/rates"))?.Data ?? new();
     }
+
+    private static string WeekendAdjustmentLabel(RatePlanDto rate)
+        => !rate.WeekendAdjustmentEnabled
+            ? "Sin ajuste"
+            : $"{RateAdjustmentTypeLabel(rate.WeekendAdjustmentType)} {rate.WeekendAdjustmentValue:0.##}";
+
+    private static string RateAdjustmentTypeLabel(RateAdjustmentType type) => type switch
+    {
+        RateAdjustmentType.Fixed => "Monto fijo",
+        RateAdjustmentType.Percentage => "Porcentaje",
+        _ => type.ToString()
+    };
 }
