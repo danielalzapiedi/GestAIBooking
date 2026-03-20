@@ -25,10 +25,6 @@
         {
             <p>Cargando usuarios...</p>
         }
-        else if (!string.IsNullOrWhiteSpace(_pageError))
-        {
-            <div class="alert alert-light border">No pudimos obtener la lista de usuarios o los hospedajes disponibles.</div>
-        }
         else if (!_items.Any())
         {
             <div class="alert alert-light border">No hay usuarios internos cargados.</div>

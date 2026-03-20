@@ -185,11 +185,11 @@ else
                 </div>
             </div>
 
-            @if (!_audit.Any())
+            @if (string.IsNullOrWhiteSpace(_auditError) && !_audit.Any())
             {
                 <EmptyState Title="Sin eventos para mostrar" Description="Probá ampliar el rango o quitar filtros para revisar más actividad." Icon="bi-clock-history" />
             }
-            else
+            else if (_audit.Any())
             {
                 <div class="agenda-stack">
                 @foreach (var item in _audit)
